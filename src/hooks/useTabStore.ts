@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Tab } from "@/types/tab";
-import type { PdfTabState } from "@/lib/session";
+import type { PdfTabState, RecentPdf } from "@/lib/session";
 import { saveSession } from "@/lib/session";
 
 function createTab(title = "Home", path = "/"): Tab {
@@ -11,9 +11,10 @@ interface TabStore {
   tabs: Tab[];
   activeTabId: string;
   pdfStates: Record<string, PdfTabState>;
+  recentPdfs: RecentPdf[];
   hydrated: boolean;
 
-  hydrate: (tabs: Tab[], activeTabId: string, pdfStates: Record<string, PdfTabState>) => void;
+  hydrate: (tabs: Tab[], activeTabId: string, pdfStates: Record<string, PdfTabState>, recentPdfs: RecentPdf[]) => void;
   addTab: () => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
@@ -21,6 +22,7 @@ interface TabStore {
   updateTabPath: (id: string, path: string) => void;
   setPdfState: (tabId: string, state: PdfTabState) => void;
   clearPdfState: (tabId: string) => void;
+  upsertRecentPdf: (entry: Omit<RecentPdf, "lastOpenedAt">) => void;
 }
 
 const initialTab = createTab();
@@ -30,8 +32,8 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave(get: () => TabStore) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    const { tabs, activeTabId, pdfStates } = get();
-    saveSession({ tabs, activeTabId, pdfStates });
+    const { tabs, activeTabId, pdfStates, recentPdfs } = get();
+    saveSession({ tabs, activeTabId, pdfStates, recentPdfs });
   }, 300);
 }
 
@@ -39,10 +41,11 @@ export const useTabStore = create<TabStore>((set, get) => ({
   tabs: [initialTab],
   activeTabId: initialTab.id,
   pdfStates: {},
+  recentPdfs: [],
   hydrated: false,
 
-  hydrate: (tabs, activeTabId, pdfStates) => {
-    set({ tabs, activeTabId, pdfStates, hydrated: true });
+  hydrate: (tabs, activeTabId, pdfStates, recentPdfs) => {
+    set({ tabs, activeTabId, pdfStates, recentPdfs: recentPdfs ?? [], hydrated: true });
   },
 
   addTab: () => {
@@ -91,6 +94,16 @@ export const useTabStore = create<TabStore>((set, get) => ({
       const next = { ...s.pdfStates };
       delete next[tabId];
       return { pdfStates: next };
+    });
+    scheduleSave(get);
+  },
+
+  upsertRecentPdf: (entry) => {
+    set((s) => {
+      const filtered = s.recentPdfs.filter((r) => r.filePath !== entry.filePath);
+      return {
+        recentPdfs: [{ ...entry, lastOpenedAt: Date.now() }, ...filtered],
+      };
     });
     scheduleSave(get);
   },

@@ -8,10 +8,21 @@ export interface PdfTabState {
   scrollMode: "continuous" | "single";
 }
 
+export interface RecentPdf {
+  filePath: string;
+  name: string;
+  currentPage: number;
+  numPages: number;
+  scale: number;
+  scrollMode: "continuous" | "single";
+  lastOpenedAt: number; // unix ms
+}
+
 export interface SessionData {
   tabs: Tab[];
   activeTabId: string;
   pdfStates: Record<string, PdfTabState>;
+  recentPdfs: RecentPdf[];
 }
 
 const SESSION_FILE = "session.json";

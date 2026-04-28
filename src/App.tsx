@@ -10,9 +10,9 @@ function App() {
   useEffect(() => {
     loadSession().then((session) => {
       if (session && session.tabs.length > 0) {
-        hydrate(session.tabs, session.activeTabId, session.pdfStates ?? {});
+        hydrate(session.tabs, session.activeTabId, session.pdfStates ?? {}, session.recentPdfs ?? []);
       } else {
-        hydrate(tabs, activeTabId, {});
+        hydrate(tabs, activeTabId, {}, []);
       }
     });
     // Run once on mount only
