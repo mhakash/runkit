@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft, FileText, ChevronLeft, ChevronRight,
-  ZoomIn, ZoomOut, Rows2, BookOpen,
+  ZoomIn, ZoomOut, Rows2, BookOpen, PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -101,6 +101,8 @@ interface PdfToolbarProps {
   numPages: number;
   scale: number;
   scrollMode: ScrollMode;
+  sidebarOpen: boolean;
+  hasOutline: boolean;
   onGoHome: () => void;
   onPickFile: () => void;
   onPrevPage: () => void;
@@ -109,11 +111,14 @@ interface PdfToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onToggleScrollMode: () => void;
+  onToggleSidebar: () => void;
 }
 
 export function PdfToolbar({
   fileName, pdfLoaded, loading, currentPage, numPages, scale, scrollMode,
-  onGoHome, onPickFile, onPrevPage, onNextPage, onGoToPage, onZoomIn, onZoomOut, onToggleScrollMode,
+  sidebarOpen, hasOutline,
+  onGoHome, onPickFile, onPrevPage, onNextPage, onGoToPage, onZoomIn, onZoomOut,
+  onToggleScrollMode, onToggleSidebar,
 }: PdfToolbarProps) {
   return (
     <div className="flex items-center gap-3 px-4 h-10 border-b border-border shrink-0 bg-surface-1">
@@ -125,6 +130,20 @@ export function PdfToolbar({
       </button>
 
       <Divider />
+
+      {pdfLoaded && (
+        <>
+          <ToolbarBtn
+            onClick={onToggleSidebar}
+            title={sidebarOpen ? "Close bookmarks" : "Open bookmarks"}
+            active={sidebarOpen}
+            disabled={!hasOutline}
+          >
+            <PanelLeft size={13} />
+          </ToolbarBtn>
+          <Divider />
+        </>
+      )}
 
       <span className={cn("text-xs font-mono truncate flex-1", fileName ? "text-text" : "text-text-dim")}>
         {fileName ?? "No file open"}

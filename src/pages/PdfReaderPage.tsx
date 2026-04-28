@@ -1,14 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import { PDFViewer, EventBus, PDFLinkService, ScrollMode as PdfScrollMode } from "pdfjs-dist/web/pdf_viewer.mjs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile, exists } from "@tauri-apps/plugin-fs";
-import { AlertTriangle, ChevronLeft, ChevronRight, Clock, FileText, FolderOpen } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, ChevronDown, Clock, FileText, FolderOpen, BookMarked } from "lucide-react";
 import { useTabStore } from "@/hooks/useTabStore";
 import { useTabContext } from "@/components/layout/TabContext";
 import { PdfToolbar } from "@/components/pdf/PdfToolbar";
 import type { RecentPdf } from "@/lib/session";
+
+interface OutlineItem {
+  title: string;
+  dest: string | Array<unknown> | null;
+  items: OutlineItem[];
+  bold: boolean;
+  italic: boolean;
+}
 import "pdfjs-dist/web/pdf_viewer.css";
 
 GlobalWorkerOptions.workerSrc = new URL(
@@ -29,7 +37,11 @@ export function PdfReaderPage() {
   const savedPdfState = useTabStore((s) => s.pdfStates[tabId]);
 
   const [recentPage, setRecentPage] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarFloat, setSidebarFloat] = useState(false);
+  const [outline, setOutline] = useState<OutlineItem[]>([]);
 
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerDivRef = useRef<HTMLDivElement>(null);
   const pdfViewerRef = useRef<PDFViewer | null>(null);
@@ -124,6 +136,18 @@ export function PdfReaderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
+  // ── Float sidebar when container is narrow ─────────────────────────────────
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const narrow = entry.contentRect.width < 600;
+      setSidebarFloat(narrow);
+      if (narrow) setSidebarOpen(false);
+    });
+    ro.observe(wrapperRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   async function restoreSession() {
     if (!savedPdfState) return;
     setLoading(true);
@@ -177,6 +201,9 @@ export function PdfReaderPage() {
     updateTabTitle(tabId, name.replace(/\.pdf$/i, ""));
     setPdfState(tabId, { filePath: path, currentPage: page, scale: zoom, scrollMode: mode });
     upsertRecentPdf({ filePath: path, name, currentPage: page, numPages: pdfDoc.numPages, scale: zoom, scrollMode: mode });
+
+    const rawOutline = await pdfDoc.getOutline();
+    setOutline((rawOutline as OutlineItem[]) ?? []);
 
     // Wait for first render then jump to saved page
     requestAnimationFrame(() => {
@@ -232,6 +259,13 @@ export function PdfReaderPage() {
     updateTabTitle(tabId, "PDF Reader");
   }
 
+  const hasOutline = outline.length > 0;
+
+  function navigateTo(dest: string | Array<unknown> | null) {
+    if (!dest || !linkServiceRef.current) return;
+    linkServiceRef.current.goToDestination(dest as string | unknown[]);
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PdfToolbar
@@ -242,6 +276,8 @@ export function PdfReaderPage() {
         numPages={numPages}
         scale={scale}
         scrollMode={scrollMode}
+        sidebarOpen={sidebarOpen}
+        hasOutline={hasOutline}
         onGoHome={goHome}
         onPickFile={pickFile}
         onPrevPage={() => changePage(currentPage - 1)}
@@ -250,62 +286,177 @@ export function PdfReaderPage() {
         onZoomIn={() => changeScale(Math.min(3, parseFloat((scale + 0.25).toFixed(2))))}
         onZoomOut={() => changeScale(Math.max(0.5, parseFloat((scale - 0.25).toFixed(2))))}
         onToggleScrollMode={toggleScrollMode}
+        onToggleSidebar={() => setSidebarOpen((o) => !o)}
       />
 
-      <div className="flex-1 overflow-hidden relative bg-surface">
-        {error && (
-          <div className="text-xs font-mono px-4 py-3 rounded-lg m-4 bg-surface-1 text-danger border border-danger">
-            {error}
-          </div>
-        )}
-
-        {fileNotFound && (
-          <div className="max-w-lg mx-auto mt-4 rounded-lg border border-warning bg-surface-1 px-4 py-3 flex items-start gap-3 text-warning">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-mono font-medium">File not found</p>
-              <p className="text-xs mt-0.5 truncate text-text-muted">{savedPdfState?.filePath}</p>
-              <p className="text-xs mt-1 text-text-muted">
-                The file may have been moved or deleted.{" "}
-                <button onClick={pickFile} className="underline underline-offset-2 text-accent">Open another PDF</button>
-                {" "}or{" "}
-                <button onClick={dismissNotFound} className="underline underline-offset-2 text-text-muted">dismiss</button>.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {!pdfLoaded && !loading && !fileNotFound && (
-          <RecentPdfList
-            recentPdfs={recentPdfs}
-            page={recentPage}
-            onPageChange={setRecentPage}
-            onOpen={(entry) => {
-              setLoading(true);
-              loadPdf(entry.filePath, entry.currentPage, entry.scale, entry.scrollMode)
-                .catch((e) => setError(String(e)))
-                .finally(() => setLoading(false));
-            }}
-            onPickFile={pickFile}
+      <div ref={wrapperRef} className="flex flex-1 overflow-hidden relative bg-surface">
+        {/* Docked sidebar */}
+        {sidebarOpen && !sidebarFloat && (
+          <OutlineSidebar
+            outline={outline}
+            onNavigate={navigateTo}
+            onClose={() => setSidebarOpen(false)}
           />
         )}
 
-        {loading && (
-          <div className="flex items-center justify-center h-full">
-            <span className="text-xs text-text-muted font-mono animate-pulse">Loading…</span>
-          </div>
+        {/* Floating sidebar overlay */}
+        {sidebarOpen && sidebarFloat && (
+          <>
+            <div
+              className="absolute inset-0 z-10"
+              onClick={() => setSidebarOpen(false)}
+            />
+            <div className="absolute top-0 left-0 bottom-0 z-20">
+              <OutlineSidebar
+                outline={outline}
+                onNavigate={navigateTo}
+                onClose={() => setSidebarOpen(false)}
+              />
+            </div>
+          </>
         )}
 
-        {/* PDFViewer container — always mounted so the viewer instance persists */}
-        <div
-          ref={containerRef}
-          id="viewerContainer"
-          className="absolute inset-0 overflow-auto"
-          style={{ display: pdfLoaded ? "block" : "none" }}
-        >
-          <div ref={viewerDivRef} className="pdfViewer" />
+        <div className="flex-1 overflow-hidden relative">
+          {error && (
+            <div className="text-xs font-mono px-4 py-3 rounded-lg m-4 bg-surface-1 text-danger border border-danger">
+              {error}
+            </div>
+          )}
+
+          {fileNotFound && (
+            <div className="max-w-lg mx-auto mt-4 rounded-lg border border-warning bg-surface-1 px-4 py-3 flex items-start gap-3 text-warning">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono font-medium">File not found</p>
+                <p className="text-xs mt-0.5 truncate text-text-muted">{savedPdfState?.filePath}</p>
+                <p className="text-xs mt-1 text-text-muted">
+                  The file may have been moved or deleted.{" "}
+                  <button onClick={pickFile} className="underline underline-offset-2 text-accent">Open another PDF</button>
+                  {" "}or{" "}
+                  <button onClick={dismissNotFound} className="underline underline-offset-2 text-text-muted">dismiss</button>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!pdfLoaded && !loading && !fileNotFound && (
+            <RecentPdfList
+              recentPdfs={recentPdfs}
+              page={recentPage}
+              onPageChange={setRecentPage}
+              onOpen={(entry) => {
+                setLoading(true);
+                loadPdf(entry.filePath, entry.currentPage, entry.scale, entry.scrollMode)
+                  .catch((e) => setError(String(e)))
+                  .finally(() => setLoading(false));
+              }}
+              onPickFile={pickFile}
+            />
+          )}
+
+          {loading && (
+            <div className="flex items-center justify-center h-full">
+              <span className="text-xs text-text-muted font-mono animate-pulse">Loading…</span>
+            </div>
+          )}
+
+          {/* PDFViewer container — always mounted so the viewer instance persists */}
+          <div
+            ref={containerRef}
+            id="viewerContainer"
+            className="absolute inset-0 overflow-auto"
+            style={{ display: pdfLoaded ? "block" : "none" }}
+          >
+            <div ref={viewerDivRef} className="pdfViewer" />
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Outline Sidebar ────────────────────────────────────────────────────────
+
+function OutlineSidebar({
+  outline,
+  onNavigate,
+  onClose,
+}: {
+  outline: OutlineItem[];
+  onNavigate: (dest: string | Array<unknown> | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex flex-col w-64 shrink-0 border-r border-border bg-surface-1 h-full overflow-hidden">
+      <div className="flex items-center justify-between px-3 h-9 border-b border-border shrink-0">
+        <span className="flex items-center gap-1.5 text-xs font-display font-medium text-text-muted uppercase tracking-wide">
+          <BookMarked size={12} />
+          Bookmarks
+        </span>
+        <button
+          onClick={onClose}
+          className="text-text-dim hover:text-text-muted transition-colors p-0.5 rounded"
+        >
+          <ChevronLeft size={13} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto py-1">
+        {outline.map((item, i) => (
+          <OutlineNode key={i} item={item} depth={0} onNavigate={onNavigate} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OutlineNode({
+  item,
+  depth,
+  onNavigate,
+}: {
+  item: OutlineItem;
+  depth: number;
+  onNavigate: (dest: string | Array<unknown> | null) => void;
+}): ReactNode {
+  const [expanded, setExpanded] = useState(depth === 0);
+  const hasChildren = item.items && item.items.length > 0;
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1 px-2 py-1 group hover:bg-surface-2 transition-colors cursor-pointer"
+        style={{ paddingLeft: `${8 + depth * 12}px` }}
+        onClick={() => {
+          if (item.dest) onNavigate(item.dest);
+          if (hasChildren) setExpanded((e) => !e);
+        }}
+      >
+        {hasChildren ? (
+          <ChevronDown
+            size={11}
+            className={`shrink-0 text-text-dim transition-transform ${expanded ? "" : "-rotate-90"}`}
+          />
+        ) : (
+          <span className="w-[11px] shrink-0" />
+        )}
+        <span
+          className={[
+            "text-xs leading-snug truncate flex-1",
+            item.bold ? "font-semibold" : "",
+            item.italic ? "italic" : "",
+            item.dest ? "text-text group-hover:text-accent" : "text-text-muted",
+          ].join(" ")}
+        >
+          {item.title || "(untitled)"}
+        </span>
+      </div>
+      {hasChildren && expanded && (
+        <div>
+          {item.items.map((child, i) => (
+            <OutlineNode key={i} item={child} depth={depth + 1} onNavigate={onNavigate} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
