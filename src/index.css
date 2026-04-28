@@ -21,6 +21,32 @@
   --color-danger: #f87171;
 }
 
+/* ── pdf_viewer.css dark theme overrides ──────────────────────────────────── */
+#viewerContainer {
+  background: var(--color-surface);
+}
+
+.pdfViewer .page {
+  border: none;
+  margin: 0 auto 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+.pdfViewer .page canvas {
+  display: block;
+}
+
+/* Text layer */
+.textLayer {
+  color: transparent;
+}
+
+.textLayer ::selection {
+  background: rgba(124, 106, 247, 0.35);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 @layer base {
   * {
     box-sizing: border-box;
