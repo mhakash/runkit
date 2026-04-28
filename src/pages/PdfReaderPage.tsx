@@ -29,6 +29,7 @@ export function PdfReaderPage() {
   const viewerDivRef = useRef<HTMLDivElement>(null);
   const pdfViewerRef = useRef<PDFViewer | null>(null);
   const eventBusRef = useRef<EventBus | null>(null);
+  const linkServiceRef = useRef<PDFLinkService | null>(null);
   const restoredRef = useRef(false);
 
   const [fileName, setFileName] = useState<string | null>(null);
@@ -72,6 +73,7 @@ export function PdfReaderPage() {
       removePageBorders: false,
     });
     linkService.setViewer(viewer);
+    linkServiceRef.current = linkService;
 
     eventBus.on("pagechanging", ({ pageNumber }: { pageNumber: number }) => {
       setCurrentPage(pageNumber);
@@ -141,8 +143,9 @@ export function PdfReaderPage() {
     const loadingTask = getDocument({ data: bytes });
     const pdfDoc = await loadingTask.promise;
 
-    viewer.setDocument(pdfDoc);
     viewer.scrollMode = mode === "single" ? PdfScrollMode.PAGE : PdfScrollMode.VERTICAL;
+    viewer.setDocument(pdfDoc);
+    linkServiceRef.current?.setDocument(pdfDoc, null);
     viewer.currentScale = zoom;
 
     const name = path.split("/").pop() ?? "document.pdf";
