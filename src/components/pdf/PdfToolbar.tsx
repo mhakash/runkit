@@ -2,6 +2,7 @@ import {
   ArrowLeft, FileText, ChevronLeft, ChevronRight,
   ZoomIn, ZoomOut, Rows2, BookOpen,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type ScrollMode = "continuous" | "single";
 
@@ -19,21 +20,12 @@ function ToolbarBtn({ onClick, title, active = false, disabled = false, children
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="p-1 rounded transition-colors disabled:opacity-30"
-      style={{
-        color: active ? "var(--color-accent)" : "var(--color-text-muted)",
-        background: active ? "var(--color-accent-dim)" : "transparent",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          (e.currentTarget as HTMLElement).style.color = "var(--color-text)";
-          (e.currentTarget as HTMLElement).style.background = "var(--color-surface-3)";
-        }
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.color = active ? "var(--color-accent)" : "var(--color-text-muted)";
-        (e.currentTarget as HTMLElement).style.background = active ? "var(--color-accent-dim)" : "transparent";
-      }}
+      className={cn(
+        "p-1 rounded transition-colors disabled:opacity-30",
+        active
+          ? "text-accent bg-accent-dim"
+          : "text-text-muted hover:text-text hover:bg-surface-3"
+      )}
     >
       {children}
     </button>
@@ -41,7 +33,7 @@ function ToolbarBtn({ onClick, title, active = false, disabled = false, children
 }
 
 function Divider() {
-  return <div className="w-px h-4 shrink-0" style={{ background: "var(--color-border)" }} />;
+  return <div className="w-px h-4 shrink-0 bg-border" />;
 }
 
 interface PdfToolbarProps {
@@ -66,26 +58,17 @@ export function PdfToolbar({
   onGoHome, onPickFile, onPrevPage, onNextPage, onZoomIn, onZoomOut, onToggleScrollMode,
 }: PdfToolbarProps) {
   return (
-    <div
-      className="flex items-center gap-3 px-4 h-10 border-b shrink-0"
-      style={{ background: "var(--color-surface-1)", borderColor: "var(--color-border)" }}
-    >
+    <div className="flex items-center gap-3 px-4 h-10 border-b border-border shrink-0 bg-surface-1">
       <button
         onClick={onGoHome}
-        className="flex items-center gap-1 text-xs transition-colors shrink-0"
-        style={{ color: "var(--color-text-muted)" }}
-        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--color-text)")}
-        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--color-text-muted)")}
+        className="flex items-center gap-1 text-xs transition-colors shrink-0 text-text-muted hover:text-text"
       >
         <ArrowLeft size={12} /> Back
       </button>
 
       <Divider />
 
-      <span
-        className="text-xs font-mono truncate flex-1"
-        style={{ color: fileName ? "var(--color-text)" : "var(--color-text-dim)" }}
-      >
+      <span className={cn("text-xs font-mono truncate flex-1", fileName ? "text-text" : "text-text-dim")}>
         {fileName ?? "No file open"}
       </span>
 
@@ -103,7 +86,7 @@ export function PdfToolbar({
 
           <div className="flex items-center gap-1 shrink-0">
             <ToolbarBtn onClick={onZoomOut} title="Zoom out"><ZoomOut size={13} /></ToolbarBtn>
-            <span className="text-xs font-mono w-10 text-center" style={{ color: "var(--color-text-muted)" }}>
+            <span className="text-xs font-mono w-10 text-center text-text-muted">
               {Math.round(scale * 100)}%
             </span>
             <ToolbarBtn onClick={onZoomIn} title="Zoom in"><ZoomIn size={13} /></ToolbarBtn>
@@ -115,7 +98,7 @@ export function PdfToolbar({
             <ToolbarBtn onClick={onPrevPage} disabled={currentPage <= 1} title="Previous page">
               <ChevronLeft size={13} />
             </ToolbarBtn>
-            <span className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>
+            <span className="text-xs font-mono text-text-muted">
               {currentPage} / {numPages}
             </span>
             <ToolbarBtn onClick={onNextPage} disabled={currentPage >= numPages} title="Next page">
@@ -128,10 +111,7 @@ export function PdfToolbar({
       <button
         onClick={onPickFile}
         disabled={loading}
-        className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono transition-all disabled:opacity-40 shrink-0"
-        style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
-        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-active)")}
-        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)")}
+        className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono transition-all disabled:opacity-40 shrink-0 bg-surface-2 border border-border text-text hover:border-border-active"
       >
         <FileText size={11} />
         {loading ? "Opening…" : pdfLoaded ? "Open another" : "Open PDF"}

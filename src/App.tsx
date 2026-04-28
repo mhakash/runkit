@@ -19,14 +19,8 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Don't render tabs until we've attempted to restore session
   if (!hydrated) {
-    return (
-      <div
-        className="flex h-full w-full items-center justify-center"
-        style={{ background: "var(--color-surface)" }}
-      />
-    );
+    return <div className="flex h-full w-full items-center justify-center bg-surface" />;
   }
 
   return (

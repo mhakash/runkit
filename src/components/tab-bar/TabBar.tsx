@@ -6,13 +6,7 @@ export function TabBar() {
   const { tabs, activeTabId, addTab, closeTab, setActiveTab } = useTabStore();
 
   return (
-    <div
-      className="flex items-stretch h-9 border-b shrink-0 overflow-x-auto"
-      style={{
-        background: "var(--color-surface)",
-        borderColor: "var(--color-border)",
-      }}
-    >
+    <div className="flex items-stretch h-9 border-b border-border shrink-0 overflow-x-auto bg-surface">
       <div className="flex items-stretch min-w-0 flex-1">
         {tabs.map((tab) => (
           <Tab
@@ -27,7 +21,7 @@ export function TabBar() {
       </div>
       <button
         onClick={addTab}
-        className="flex-shrink-0 flex items-center justify-center w-9 h-full transition-colors hover:bg-[var(--color-surface-2)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] border-l border-[var(--color-border)]"
+        className="shrink-0 flex items-center justify-center w-9 h-full transition-colors hover:bg-surface-2 text-text-muted hover:text-text border-l border-border"
         title="New tab"
       >
         <Plus size={14} />

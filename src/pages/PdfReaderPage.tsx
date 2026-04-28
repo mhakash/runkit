@@ -42,12 +42,10 @@ export function PdfReaderPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
 
-  // ── Save current state to session whenever page/scale/mode changes ──────────
   function persist(page: number, zoom: number, mode: ScrollMode, fp = filePath) {
     if (fp) setPdfState(tabId, { filePath: fp, currentPage: page, scale: zoom, scrollMode: mode });
   }
 
-  // ── Virtual scroll + page tracking ─────────────────────────────────────────
   const { virtualizer, scrollToPage } = usePdfVirtualScroll({
     numPages,
     scrollRef,
@@ -60,7 +58,6 @@ export function PdfReaderPage() {
     },
   });
 
-  // ── Pinch / trackpad zoom ───────────────────────────────────────────────────
   usePinchZoom({
     scrollRef,
     scale,
@@ -70,7 +67,6 @@ export function PdfReaderPage() {
     },
   });
 
-  // ── Restore session on first mount ─────────────────────────────────────────
   useEffect(() => {
     if (restoredRef.current || !savedPdfState) return;
     restoredRef.current = true;
@@ -98,7 +94,6 @@ export function PdfReaderPage() {
     }
   }
 
-  // ── Load a PDF from a file path ─────────────────────────────────────────────
   async function loadPdf(path: string, page = 1, zoom = 1.0, mode: ScrollMode = "continuous") {
     const bytes = await readFile(path);
     const blob = new Blob([bytes], { type: "application/pdf" });
@@ -180,31 +175,29 @@ export function PdfReaderPage() {
         onToggleScrollMode={toggleScrollMode}
       />
 
-      <div ref={scrollRef} className="flex-1 overflow-auto" style={{ background: "var(--color-surface)" }}>
+      <div ref={scrollRef} className="flex-1 overflow-auto bg-surface">
 
         {error && (
-          <div className="text-xs font-mono px-4 py-3 rounded-lg m-4"
-            style={{ background: "var(--color-surface-1)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>
+          <div className="text-xs font-mono px-4 py-3 rounded-lg m-4 bg-surface-1 text-danger border border-danger">
             {error}
           </div>
         )}
 
         {fileNotFound && (
-          <div className="max-w-lg mx-auto mt-4 rounded-lg border px-4 py-3 flex items-start gap-3"
-            style={{ background: "var(--color-surface-1)", borderColor: "var(--color-warning)", color: "var(--color-warning)" }}>
+          <div className="max-w-lg mx-auto mt-4 rounded-lg border border-warning bg-surface-1 px-4 py-3 flex items-start gap-3 text-warning">
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-mono font-medium">File not found</p>
-              <p className="text-xs mt-0.5 truncate" style={{ color: "var(--color-text-muted)" }}>
+              <p className="text-xs mt-0.5 truncate text-text-muted">
                 {savedPdfState?.filePath}
               </p>
-              <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+              <p className="text-xs mt-1 text-text-muted">
                 The file may have been moved or deleted.{" "}
-                <button onClick={pickFile} className="underline underline-offset-2" style={{ color: "var(--color-accent)" }}>
+                <button onClick={pickFile} className="underline underline-offset-2 text-accent">
                   Open another PDF
                 </button>
                 {" "}or{" "}
-                <button onClick={dismissNotFound} className="underline underline-offset-2" style={{ color: "var(--color-text-muted)" }}>
+                <button onClick={dismissNotFound} className="underline underline-offset-2 text-text-muted">
                   dismiss
                 </button>.
               </p>
@@ -214,13 +207,12 @@ export function PdfReaderPage() {
 
         {!pdfUrl && !loading && !fileNotFound && (
           <div className="flex flex-col items-center justify-center h-full gap-4">
-            <div className="w-16 h-16 rounded-xl flex items-center justify-center"
-              style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}>
-              <FileText size={28} style={{ color: "var(--color-text-dim)" }} />
+            <div className="w-16 h-16 rounded-xl flex items-center justify-center bg-surface-1 border border-border">
+              <FileText size={28} className="text-text-dim" />
             </div>
-            <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+            <p className="text-sm text-text-muted">
               No PDF open —{" "}
-              <button onClick={pickFile} className="underline underline-offset-2" style={{ color: "var(--color-accent)" }}>
+              <button onClick={pickFile} className="underline underline-offset-2 text-accent">
                 Open PDF
               </button>{" "}
               to get started.
@@ -233,8 +225,9 @@ export function PdfReaderPage() {
             file={pdfUrl}
             onLoadSuccess={onDocumentLoadSuccess}
             loading={
-              <div className="flex items-center justify-center h-32 text-xs font-mono"
-                style={{ color: "var(--color-text-muted)" }}>Loading…</div>
+              <div className="flex items-center justify-center h-32 text-xs font-mono text-text-muted">
+                Loading…
+              </div>
             }
           >
             {scrollMode === "single" ? (

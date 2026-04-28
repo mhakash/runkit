@@ -33,44 +33,27 @@ export function HelloWorldPage() {
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="max-w-lg w-full mx-auto px-8 py-10">
-        {/* Back */}
         <button
           onClick={goHome}
-          className="flex items-center gap-1.5 text-xs mb-8 transition-colors"
-          style={{ color: "var(--color-text-muted)" }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--color-text)")}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--color-text-muted)")}
+          className="flex items-center gap-1.5 text-xs mb-8 transition-colors text-text-muted hover:text-text"
         >
           <ArrowLeft size={12} />
           Back to tools
         </button>
 
-        {/* Header */}
         <div className="flex items-center gap-3 mb-8">
           <span className="text-3xl">👋</span>
           <div>
-            <h1
-              className="text-2xl font-bold tracking-tight"
-              style={{ color: "var(--color-text)", fontFamily: "var(--font-display)" }}
-            >
+            <h1 className="text-2xl font-bold tracking-tight text-text font-display">
               Hello World
             </h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-              Rust IPC test tool
-            </p>
+            <p className="text-xs mt-0.5 text-text-muted">Rust IPC test tool</p>
           </div>
         </div>
 
-        {/* Form */}
-        <div
-          className="rounded-lg border p-6 space-y-4"
-          style={{ background: "var(--color-surface-1)", borderColor: "var(--color-border)" }}
-        >
+        <div className="rounded-lg border border-border bg-surface-1 p-6 space-y-4">
           <div>
-            <label
-              className="block text-xs font-mono mb-2 tracking-wide"
-              style={{ color: "var(--color-text-muted)" }}
-            >
+            <label className="block text-xs font-mono mb-2 tracking-wide text-text-muted">
               YOUR NAME
             </label>
             <input
@@ -79,48 +62,22 @@ export function HelloWorldPage() {
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleGreet()}
               placeholder="Enter your name…"
-              className="w-full rounded-md px-3 py-2 text-sm outline-none transition-colors"
-              style={{
-                background: "var(--color-surface-2)",
-                border: "1px solid var(--color-border)",
-                color: "var(--color-text)",
-                userSelect: "text",
-              }}
-              onFocus={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-accent)")}
-              onBlur={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)")}
+              className="w-full rounded-md px-3 py-2 text-sm outline-none transition-colors bg-surface-2 border border-border text-text focus:border-accent select-text"
             />
           </div>
 
           <button
             onClick={handleGreet}
             disabled={!name.trim() || loading}
-            className="flex items-center gap-2 w-full justify-center rounded-md py-2 text-sm font-mono tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: "var(--color-accent)",
-              color: "white",
-            }}
-            onMouseEnter={(e) => {
-              if (!loading && name.trim()) (e.currentTarget as HTMLElement).style.background = "var(--color-accent-hover)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "var(--color-accent)";
-            }}
+            className="flex items-center gap-2 w-full justify-center rounded-md py-2 text-sm font-mono tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-accent text-white hover:bg-accent-hover"
           >
             <Zap size={13} />
             {loading ? "Calling Rust…" : "Greet from Rust"}
           </button>
         </div>
 
-        {/* Response */}
         {response && (
-          <div
-            className="mt-4 rounded-lg border px-5 py-4 font-mono text-sm leading-relaxed animate-in fade-in slide-in-from-bottom-2 duration-300"
-            style={{
-              background: "var(--color-surface-1)",
-              borderColor: "var(--color-border-active)",
-              color: "var(--color-success)",
-            }}
-          >
+          <div className="mt-4 rounded-lg border border-border-active bg-surface-1 px-5 py-4 font-mono text-sm leading-relaxed text-success animate-in fade-in slide-in-from-bottom-2 duration-300">
             {response}
           </div>
         )}
