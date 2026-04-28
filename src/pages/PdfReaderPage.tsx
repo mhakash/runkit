@@ -3,9 +3,12 @@ import { useNavigate } from "react-router";
 import { Document, Page, pdfjs } from "react-pdf";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile, exists } from "@tauri-apps/plugin-fs";
-import { ArrowLeft, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, AlertTriangle } from "lucide-react";
+import { AlertTriangle, FileText } from "lucide-react";
 import { useTabStore } from "@/hooks/useTabStore";
 import { useTabContext } from "@/components/layout/TabContext";
+import { usePdfVirtualScroll } from "@/hooks/usePdfVirtualScroll";
+import { usePinchZoom } from "@/hooks/usePinchZoom";
+import { PdfToolbar } from "@/components/pdf/PdfToolbar";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -14,9 +17,12 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
+type ScrollMode = "continuous" | "single";
+const PAGE_GAP = 16;
+
 export function PdfReaderPage() {
   const navigate = useNavigate();
-  const { tabId } = useTabContext();
+  const { tabId, isActive } = useTabContext();
   const updateTabTitle = useTabStore((s) => s.updateTabTitle);
   const setPdfState = useTabStore((s) => s.setPdfState);
   const clearPdfState = useTabStore((s) => s.clearPdfState);
@@ -25,73 +31,98 @@ export function PdfReaderPage() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [numPages, setNumPages] = useState<number>(0);
+  const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(savedPdfState?.currentPage ?? 1);
   const [scale, setScale] = useState(savedPdfState?.scale ?? 1.0);
+  const [scrollMode, setScrollMode] = useState<ScrollMode>(savedPdfState?.scrollMode ?? "continuous");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileNotFound, setFileNotFound] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
 
-  // Restore previous session on first mount
+  // ── Save current state to session whenever page/scale/mode changes ──────────
+  function persist(page: number, zoom: number, mode: ScrollMode, fp = filePath) {
+    if (fp) setPdfState(tabId, { filePath: fp, currentPage: page, scale: zoom, scrollMode: mode });
+  }
+
+  // ── Virtual scroll + page tracking ─────────────────────────────────────────
+  const { virtualizer, scrollToPage } = usePdfVirtualScroll({
+    numPages,
+    scrollRef,
+    currentPage,
+    scrollMode,
+    isActive,
+    onPageChange: (page) => {
+      setCurrentPage(page);
+      persist(page, scale, scrollMode);
+    },
+  });
+
+  // ── Pinch / trackpad zoom ───────────────────────────────────────────────────
+  usePinchZoom({
+    scrollRef,
+    scale,
+    onScale: (next) => {
+      setScale(next);
+      persist(currentPage, next, scrollMode);
+    },
+  });
+
+  // ── Restore session on first mount ─────────────────────────────────────────
   useEffect(() => {
     if (restoredRef.current || !savedPdfState) return;
     restoredRef.current = true;
-
-    async function restore() {
-      if (!savedPdfState) return;
-      setLoading(true);
-      try {
-        const fileExists = await exists(savedPdfState.filePath);
-        if (!fileExists) {
-          setFileNotFound(true);
-          const name = savedPdfState.filePath.split("/").pop() ?? "document.pdf";
-          setFileName(name);
-          return;
-        }
-        await loadPdf(savedPdfState.filePath, savedPdfState.currentPage, savedPdfState.scale);
-      } catch (e) {
-        console.error("Failed to restore PDF session:", e);
-        setFileNotFound(true);
-        const name = savedPdfState.filePath.split("/").pop() ?? "document.pdf";
-        setFileName(name);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    restore();
+    restoreSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadPdf(path: string, page = 1, zoom = 1.0) {
+  async function restoreSession() {
+    if (!savedPdfState) return;
+    setLoading(true);
+    try {
+      const fileExists = await exists(savedPdfState.filePath);
+      if (!fileExists) {
+        setFileNotFound(true);
+        setFileName(savedPdfState.filePath.split("/").pop() ?? "document.pdf");
+        return;
+      }
+      await loadPdf(savedPdfState.filePath, savedPdfState.currentPage, savedPdfState.scale, savedPdfState.scrollMode ?? "continuous");
+    } catch (e) {
+      console.error("Failed to restore PDF session:", e);
+      setFileNotFound(true);
+      setFileName(savedPdfState.filePath.split("/").pop() ?? "document.pdf");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Load a PDF from a file path ─────────────────────────────────────────────
+  async function loadPdf(path: string, page = 1, zoom = 1.0, mode: ScrollMode = "continuous") {
     const bytes = await readFile(path);
     const blob = new Blob([bytes], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
-    setPdfUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return url;
-    });
+    setPdfUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
     const name = path.split("/").pop() ?? "document.pdf";
     setFileName(name);
     setFilePath(path);
     setCurrentPage(page);
     setScale(zoom);
+    setScrollMode(mode);
     setFileNotFound(false);
+    setNumPages(0);
     updateTabTitle(tabId, name.replace(/\.pdf$/i, ""));
-    setPdfState(tabId, { filePath: path, currentPage: page, scale: zoom });
+    setPdfState(tabId, { filePath: path, currentPage: page, scale: zoom, scrollMode: mode });
   }
 
   async function pickFile() {
     try {
       setError(null);
-      const selected = await openDialog({
-        multiple: false,
-        filters: [{ name: "PDF", extensions: ["pdf"] }],
-      });
+      const selected = await openDialog({ multiple: false, filters: [{ name: "PDF", extensions: ["pdf"] }] });
       if (!selected) return;
       setLoading(true);
-      await loadPdf(selected as string);
+      await loadPdf(selected as string, 1, scale, scrollMode);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -103,25 +134,25 @@ export function PdfReaderPage() {
     setNumPages(numPages);
   }, []);
 
-  function goHome() {
-    updateTabTitle(tabId, "Home");
-    navigate("/");
-  }
+  function goHome() { updateTabTitle(tabId, "Home"); navigate("/"); }
 
   function changePage(next: number) {
-    setCurrentPage(next);
-    if (filePath) setPdfState(tabId, { filePath, currentPage: next, scale });
+    const p = Math.max(1, Math.min(numPages, next));
+    setCurrentPage(p);
+    persist(p, scale, scrollMode);
+    scrollToPage(p, "smooth");
   }
 
   function changeScale(next: number) {
     setScale(next);
-    if (filePath) setPdfState(tabId, { filePath, currentPage, scale: next });
+    persist(currentPage, next, scrollMode);
   }
 
-  function prevPage() { changePage(Math.max(1, currentPage - 1)); }
-  function nextPage() { changePage(Math.min(numPages, currentPage + 1)); }
-  function zoomIn() { changeScale(Math.min(3, parseFloat((scale + 0.25).toFixed(2)))); }
-  function zoomOut() { changeScale(Math.max(0.5, parseFloat((scale - 0.25).toFixed(2)))); }
+  function toggleScrollMode() {
+    const next: ScrollMode = scrollMode === "continuous" ? "single" : "continuous";
+    setScrollMode(next);
+    persist(currentPage, scale, next);
+  }
 
   function dismissNotFound() {
     setFileNotFound(false);
@@ -132,85 +163,34 @@ export function PdfReaderPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Top bar */}
-      <div
-        className="flex items-center gap-3 px-4 h-10 border-b shrink-0"
-        style={{ background: "var(--color-surface-1)", borderColor: "var(--color-border)" }}
-      >
-        <button
-          onClick={goHome}
-          className="flex items-center gap-1 text-xs transition-colors shrink-0"
-          style={{ color: "var(--color-text-muted)" }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--color-text)")}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--color-text-muted)")}
-        >
-          <ArrowLeft size={12} />
-          Back
-        </button>
+      <PdfToolbar
+        fileName={fileName}
+        pdfLoaded={!!pdfUrl && numPages > 0}
+        loading={loading}
+        currentPage={currentPage}
+        numPages={numPages}
+        scale={scale}
+        scrollMode={scrollMode}
+        onGoHome={goHome}
+        onPickFile={pickFile}
+        onPrevPage={() => changePage(currentPage - 1)}
+        onNextPage={() => changePage(currentPage + 1)}
+        onZoomIn={() => changeScale(Math.min(3, parseFloat((scale + 0.25).toFixed(2))))}
+        onZoomOut={() => changeScale(Math.max(0.5, parseFloat((scale - 0.25).toFixed(2))))}
+        onToggleScrollMode={toggleScrollMode}
+      />
 
-        <div className="w-px h-4 shrink-0" style={{ background: "var(--color-border)" }} />
+      <div ref={scrollRef} className="flex-1 overflow-auto" style={{ background: "var(--color-surface)" }}>
 
-        <span
-          className="text-xs font-mono truncate flex-1"
-          style={{ color: fileName ? "var(--color-text)" : "var(--color-text-dim)" }}
-        >
-          {fileName ?? "No file open"}
-        </span>
-
-        {pdfUrl && (
-          <>
-            <div className="flex items-center gap-1 shrink-0">
-              <button onClick={zoomOut} className="p-1 rounded transition-colors" style={{ color: "var(--color-text-muted)" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-text)"; (e.currentTarget as HTMLElement).style.background = "var(--color-surface-3)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-text-muted)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                title="Zoom out"><ZoomOut size={13} /></button>
-              <span className="text-xs font-mono w-10 text-center" style={{ color: "var(--color-text-muted)" }}>
-                {Math.round(scale * 100)}%
-              </span>
-              <button onClick={zoomIn} className="p-1 rounded transition-colors" style={{ color: "var(--color-text-muted)" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-text)"; (e.currentTarget as HTMLElement).style.background = "var(--color-surface-3)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-text-muted)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                title="Zoom in"><ZoomIn size={13} /></button>
-            </div>
-            <div className="w-px h-4 shrink-0" style={{ background: "var(--color-border)" }} />
-            <div className="flex items-center gap-1 shrink-0">
-              <button onClick={prevPage} disabled={currentPage <= 1}
-                className="p-1 rounded transition-colors disabled:opacity-30" style={{ color: "var(--color-text-muted)" }}
-                onMouseEnter={(e) => { if (currentPage > 1) (e.currentTarget as HTMLElement).style.background = "var(--color-surface-3)"; }}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}>
-                <ChevronLeft size={13} /></button>
-              <span className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>{currentPage} / {numPages}</span>
-              <button onClick={nextPage} disabled={currentPage >= numPages}
-                className="p-1 rounded transition-colors disabled:opacity-30" style={{ color: "var(--color-text-muted)" }}
-                onMouseEnter={(e) => { if (currentPage < numPages) (e.currentTarget as HTMLElement).style.background = "var(--color-surface-3)"; }}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}>
-                <ChevronRight size={13} /></button>
-            </div>
-          </>
-        )}
-
-        <button onClick={pickFile} disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono transition-all disabled:opacity-40 shrink-0"
-          style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border-active)")}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)")}>
-          <FileText size={11} />
-          {loading ? "Opening…" : pdfUrl ? "Open another" : "Open PDF"}
-        </button>
-      </div>
-
-      {/* Content area */}
-      <div className="flex-1 overflow-auto flex flex-col items-center py-6 gap-4" style={{ background: "var(--color-surface)" }}>
         {error && (
-          <div className="text-xs font-mono px-4 py-3 rounded-lg mt-2"
+          <div className="text-xs font-mono px-4 py-3 rounded-lg m-4"
             style={{ background: "var(--color-surface-1)", color: "var(--color-danger)", border: "1px solid var(--color-danger)" }}>
             {error}
           </div>
         )}
 
-        {/* File not found banner */}
         {fileNotFound && (
-          <div className="w-full max-w-lg mx-auto mt-2 rounded-lg border px-4 py-3 flex items-start gap-3"
+          <div className="max-w-lg mx-auto mt-4 rounded-lg border px-4 py-3 flex items-start gap-3"
             style={{ background: "var(--color-surface-1)", borderColor: "var(--color-warning)", color: "var(--color-warning)" }}>
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
@@ -233,7 +213,7 @@ export function PdfReaderPage() {
         )}
 
         {!pdfUrl && !loading && !fileNotFound && (
-          <div className="flex flex-col items-center justify-center flex-1 gap-4">
+          <div className="flex flex-col items-center justify-center h-full gap-4">
             <div className="w-16 h-16 rounded-xl flex items-center justify-center"
               style={{ background: "var(--color-surface-1)", border: "1px solid var(--color-border)" }}>
               <FileText size={28} style={{ color: "var(--color-text-dim)" }} />
@@ -249,9 +229,43 @@ export function PdfReaderPage() {
         )}
 
         {pdfUrl && (
-          <Document file={pdfUrl} onLoadSuccess={onDocumentLoadSuccess}
-            loading={<div className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>Loading PDF…</div>}>
-            <Page pageNumber={currentPage} scale={scale} className="shadow-2xl" renderTextLayer renderAnnotationLayer />
+          <Document
+            file={pdfUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            loading={
+              <div className="flex items-center justify-center h-32 text-xs font-mono"
+                style={{ color: "var(--color-text-muted)" }}>Loading…</div>
+            }
+          >
+            {scrollMode === "single" ? (
+              <div className="flex justify-center py-6">
+                <Page pageNumber={currentPage} scale={scale} className="shadow-2xl"
+                  renderTextLayer renderAnnotationLayer />
+              </div>
+            ) : (
+              <div style={{ height: virtualizer.getTotalSize(), width: "100%", position: "relative" }}>
+                {virtualizer.getVirtualItems().map((item) => (
+                  <div
+                    key={item.key}
+                    data-index={item.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${item.start}px)`,
+                      display: "flex",
+                      justifyContent: "center",
+                      paddingBottom: PAGE_GAP,
+                    }}
+                  >
+                    <Page pageNumber={item.index + 1} scale={scale} className="shadow-2xl"
+                      renderTextLayer renderAnnotationLayer />
+                  </div>
+                ))}
+              </div>
+            )}
           </Document>
         )}
       </div>

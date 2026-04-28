@@ -5,6 +5,7 @@ export interface PdfTabState {
   filePath: string;
   currentPage: number;
   scale: number;
+  scrollMode: "continuous" | "single";
 }
 
 export interface SessionData {

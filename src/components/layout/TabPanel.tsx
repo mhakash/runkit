@@ -26,7 +26,7 @@ interface TabPanelProps {
 
 export function TabPanel({ tabId, isActive, initialPath }: TabPanelProps) {
   return (
-    <TabContext.Provider value={{ tabId }}>
+    <TabContext.Provider value={{ tabId, isActive }}>
       <div
         className="absolute inset-0"
         style={{ display: isActive ? "flex" : "none", flexDirection: "column" }}
