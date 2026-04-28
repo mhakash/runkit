@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft, FileText, ChevronLeft, ChevronRight,
   ZoomIn, ZoomOut, Rows2, BookOpen,
@@ -36,6 +37,62 @@ function Divider() {
   return <div className="w-px h-4 shrink-0 bg-border" />;
 }
 
+interface PageInputProps {
+  currentPage: number;
+  numPages: number;
+  onGoToPage: (page: number) => void;
+}
+
+function PageInput({ currentPage, numPages, onGoToPage }: PageInputProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  function startEdit() {
+    setDraft(String(currentPage));
+    setEditing(true);
+  }
+
+  function commit() {
+    const n = parseInt(draft, 10);
+    if (!isNaN(n)) onGoToPage(n);
+    setEditing(false);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") commit();
+    if (e.key === "Escape") setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={onKeyDown}
+        className="w-10 text-center text-xs font-mono rounded px-1 py-0.5 outline-none bg-surface-2 border border-accent text-text select-text"
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={startEdit}
+      title="Go to page"
+      className="text-xs font-mono text-text-muted hover:text-text hover:bg-surface-3 rounded px-1 py-0.5 transition-colors"
+    >
+      {currentPage} / {numPages}
+    </button>
+  );
+}
+
 interface PdfToolbarProps {
   fileName: string | null;
   pdfLoaded: boolean;
@@ -48,6 +105,7 @@ interface PdfToolbarProps {
   onPickFile: () => void;
   onPrevPage: () => void;
   onNextPage: () => void;
+  onGoToPage: (page: number) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onToggleScrollMode: () => void;
@@ -55,7 +113,7 @@ interface PdfToolbarProps {
 
 export function PdfToolbar({
   fileName, pdfLoaded, loading, currentPage, numPages, scale, scrollMode,
-  onGoHome, onPickFile, onPrevPage, onNextPage, onZoomIn, onZoomOut, onToggleScrollMode,
+  onGoHome, onPickFile, onPrevPage, onNextPage, onGoToPage, onZoomIn, onZoomOut, onToggleScrollMode,
 }: PdfToolbarProps) {
   return (
     <div className="flex items-center gap-3 px-4 h-10 border-b border-border shrink-0 bg-surface-1">
@@ -98,9 +156,7 @@ export function PdfToolbar({
             <ToolbarBtn onClick={onPrevPage} disabled={currentPage <= 1} title="Previous page">
               <ChevronLeft size={13} />
             </ToolbarBtn>
-            <span className="text-xs font-mono text-text-muted">
-              {currentPage} / {numPages}
-            </span>
+            <PageInput currentPage={currentPage} numPages={numPages} onGoToPage={onGoToPage} />
             <ToolbarBtn onClick={onNextPage} disabled={currentPage >= numPages} title="Next page">
               <ChevronRight size={13} />
             </ToolbarBtn>

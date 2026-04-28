@@ -229,6 +229,7 @@ export function PdfReaderPage() {
         onPickFile={pickFile}
         onPrevPage={() => changePage(currentPage - 1)}
         onNextPage={() => changePage(currentPage + 1)}
+        onGoToPage={(p) => changePage(p)}
         onZoomIn={() => changeScale(Math.min(3, parseFloat((scale + 0.25).toFixed(2))))}
         onZoomOut={() => changeScale(Math.max(0.5, parseFloat((scale - 0.25).toFixed(2))))}
         onToggleScrollMode={toggleScrollMode}
