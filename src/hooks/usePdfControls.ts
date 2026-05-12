@@ -208,6 +208,35 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
+  // ── Pinch-to-zoom ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !pdfLoaded) return;
+
+    let rafId: number | null = null;
+    let pendingScale: number | null = null;
+
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const viewer = pdfViewerRef.current;
+      if (!viewer) return;
+      const current = pendingScale ?? viewer.currentScale;
+      pendingScale = Math.min(5, Math.max(0.25, current * Math.pow(0.998, e.deltaY)));
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        if (pdfViewerRef.current && pendingScale !== null) {
+          pdfViewerRef.current.currentScale = pendingScale;
+        }
+        pendingScale = null;
+        rafId = null;
+      });
+    }
+
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, [pdfLoaded]);
+
   // ── Float sidebar when container is narrow ─────────────────────────────────
   useEffect(() => {
     if (!wrapperRef.current) return;
