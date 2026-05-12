@@ -121,6 +121,19 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
     setCanGoForward(navIndexRef.current < navHistoryRef.current.length - 1);
   }
 
+  // Call before any jump navigation to record origin and arm the history push
+  function pushCurrentAndSetFlag() {
+    const current = currentPageRef.current;
+    const lastEntry = navHistoryRef.current[navIndexRef.current];
+    if (current !== lastEntry) {
+      navHistoryRef.current = navHistoryRef.current.slice(0, navIndexRef.current + 1);
+      navHistoryRef.current.push(current);
+      navIndexRef.current = navHistoryRef.current.length - 1;
+      syncNavState();
+    }
+    isProgrammaticNavRef.current = true;
+  }
+
   function persist(page: number, zoom: number, mode: ScrollMode, fp = filePathRef.current) {
     if (!fp) return;
     setPdfState(tabId, { filePath: fp, currentPage: page, scale: zoom, scrollMode: mode });
@@ -145,6 +158,15 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
       removePageBorders: false,
     });
     linkService.setViewer(viewer);
+
+    // Intercept all destination navigations (internal links, TOC clicks, etc.)
+    // so they're treated identically to explicit navigateTo() calls.
+    const originalGoTo = linkService.goToDestination.bind(linkService);
+    linkService.goToDestination = (dest) => {
+      pushCurrentAndSetFlag();
+      return originalGoTo(dest);
+    };
+
     linkServiceRef.current = linkService;
 
     eventBus.on("pagechanging", ({ pageNumber }: { pageNumber: number }) => {
@@ -153,7 +175,6 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
 
       if (isProgrammaticNavRef.current) {
         isProgrammaticNavRef.current = false;
-        // Truncate forward branch, then push the destination (not the origin)
         navHistoryRef.current = navHistoryRef.current.slice(0, navIndexRef.current + 1);
         navHistoryRef.current.push(pageNumber);
         navIndexRef.current = navHistoryRef.current.length - 1;
@@ -303,14 +324,14 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
 
   function navigateTo(dest: string | Array<unknown> | null) {
     if (!dest || !linkServiceRef.current) return;
-    isProgrammaticNavRef.current = true;
+    // goToDestination is already wrapped to call pushCurrentAndSetFlag
     linkServiceRef.current.goToDestination(dest as string | unknown[]);
   }
 
   function goToPage(page: number) {
     const viewer = pdfViewerRef.current;
     if (!viewer || !pdfLoaded) return;
-    isProgrammaticNavRef.current = true;
+    pushCurrentAndSetFlag();
     viewer.currentPageNumber = Math.max(1, Math.min(numPagesRef.current, page));
   }
 
