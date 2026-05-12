@@ -181,14 +181,16 @@ export function PdfToolbar({ controls }: { controls: PdfControls }) {
         </>
       )}
 
-      <button
-        onClick={actions.pickFile}
-        disabled={state.loading}
-        className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono transition-all disabled:opacity-40 shrink-0 bg-surface-2 border border-border text-text hover:border-border-active"
-      >
-        <FileText size={11} />
-        {state.loading ? "Opening…" : state.pdfLoaded ? "Open another" : "Open PDF"}
-      </button>
+      {!state.pdfLoaded && (
+        <button
+          onClick={actions.pickFile}
+          disabled={state.loading}
+          className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono transition-all disabled:opacity-40 shrink-0 bg-surface-2 border border-border text-text hover:border-border-active"
+        >
+          <FileText size={11} />
+          {state.loading ? "Opening…" : "Open PDF"}
+        </button>
+      )}
     </div>
   );
 }
