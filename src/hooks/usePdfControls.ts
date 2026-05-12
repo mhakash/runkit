@@ -309,6 +309,62 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
     viewer.currentPageNumber = Math.max(1, Math.min(numPagesRef.current, next));
   }, [pdfLoaded]);
 
+  // ── Keyboard navigation ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isActive || !pdfLoaded) return;
+    const isContinuous = scrollModeRef.current === "continuous";
+
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const container = containerRef.current;
+
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          if (isContinuous) container?.scrollBy({ top: 100 });
+          else changePage(currentPageRef.current + 1);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          if (isContinuous) container?.scrollBy({ top: -100 });
+          else changePage(currentPageRef.current - 1);
+          break;
+        case " ":
+          e.preventDefault();
+          if (isContinuous) {
+            const delta = container ? container.clientHeight - 40 : 400;
+            container?.scrollBy({ top: e.shiftKey ? -delta : delta, behavior: "smooth" });
+          } else {
+            changePage(currentPageRef.current + (e.shiftKey ? -1 : 1));
+          }
+          break;
+        case "ArrowRight":
+        case "PageDown":
+          e.preventDefault();
+          changePage(currentPageRef.current + 1);
+          break;
+        case "ArrowLeft":
+        case "PageUp":
+          e.preventDefault();
+          changePage(currentPageRef.current - 1);
+          break;
+        case "Home":
+          e.preventDefault();
+          changePage(1);
+          break;
+        case "End":
+          e.preventDefault();
+          changePage(numPagesRef.current);
+          break;
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isActive, pdfLoaded, scrollMode, changePage]);
+
   const changeScale = useCallback((next: number) => {
     const viewer = pdfViewerRef.current;
     if (viewer) viewer.currentScale = next;
