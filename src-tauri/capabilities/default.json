@@ -11,6 +11,7 @@
     "fs:allow-appdata-read-recursive",
     "fs:allow-appdata-write-recursive",
     "fs:scope-appdata-recursive",
-    "fs:scope-home-recursive"
+    "fs:scope-home-recursive",
+    "window-state:default"
   ]
 }
