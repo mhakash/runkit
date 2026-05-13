@@ -11,6 +11,14 @@ GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
+function fileNameFromPath(path: string): string {
+  return path.split("/").pop() ?? "document.pdf";
+}
+
+function clampPage(page: number, total: number): number {
+  return Math.max(1, Math.min(total, page));
+}
+
 type ScrollMode = "continuous" | "single";
 
 export interface OutlineItem {
@@ -97,19 +105,13 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
   const linkServiceRef = useRef<PDFLinkService | null>(null);
   const restoredRef = useRef(false);
 
-  // Kept in sync so event bus callbacks don't capture stale closures
+  // Refs mirror state so event bus callbacks never capture stale closures
   const currentPageRef = useRef(currentPage);
   const scaleRef = useRef(scale);
   const scrollModeRef = useRef(scrollMode);
   const filePathRef = useRef(filePath);
   const fileNameRef = useRef<string | null>(null);
   const numPagesRef = useRef(0);
-  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
-  useEffect(() => { scaleRef.current = scale; }, [scale]);
-  useEffect(() => { scrollModeRef.current = scrollMode; }, [scrollMode]);
-  useEffect(() => { filePathRef.current = filePath; }, [filePath]);
-  useEffect(() => { fileNameRef.current = fileName; }, [fileName]);
-  useEffect(() => { numPagesRef.current = numPages; }, [numPages]);
 
   // Navigation history — in-memory only, not persisted
   const navHistoryRef = useRef<number[]>([]);
@@ -170,6 +172,7 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
     linkServiceRef.current = linkService;
 
     eventBus.on("pagechanging", ({ pageNumber }: { pageNumber: number }) => {
+      currentPageRef.current = pageNumber;
       setCurrentPage(pageNumber);
       persist(pageNumber, scaleRef.current, scrollModeRef.current);
 
@@ -182,10 +185,15 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
       }
     });
 
+    let scaleDebounceId: ReturnType<typeof setTimeout> | null = null;
     eventBus.on("scalechanging", ({ scale: s }: { scale: number }) => {
       const rounded = parseFloat(s.toFixed(2));
+      scaleRef.current = rounded;
       setScale(rounded);
-      persist(currentPageRef.current, rounded, scrollModeRef.current);
+      if (scaleDebounceId) clearTimeout(scaleDebounceId);
+      scaleDebounceId = setTimeout(() => {
+        persist(currentPageRef.current, rounded, scrollModeRef.current);
+      }, 200);
     });
 
     pdfViewerRef.current = viewer;
@@ -256,14 +264,14 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
       const fileExists = await exists(savedPdfState.filePath);
       if (!fileExists) {
         setFileNotFound(true);
-        setFileName(savedPdfState.filePath.split("/").pop() ?? "document.pdf");
+        setFileName(fileNameFromPath(savedPdfState.filePath));
         return;
       }
       await loadPdf(savedPdfState.filePath, savedPdfState.currentPage, savedPdfState.scale, savedPdfState.scrollMode ?? "continuous");
     } catch (e) {
       console.error("Failed to restore PDF session:", e);
       setFileNotFound(true);
-      setFileName(savedPdfState.filePath.split("/").pop() ?? "document.pdf");
+      setFileName(fileNameFromPath(savedPdfState.filePath));
     } finally {
       setLoading(false);
     }
@@ -281,16 +289,19 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
     linkServiceRef.current?.setDocument(pdfDoc, null);
     viewer.currentScale = zoom;
 
-    const name = path.split("/").pop() ?? "document.pdf";
-    setFileName(name);
-    setFilePath(path);
+    const name = fileNameFromPath(path);
     filePathRef.current = path;
     fileNameRef.current = name;
+    currentPageRef.current = page;
+    scaleRef.current = zoom;
+    scrollModeRef.current = mode;
+    numPagesRef.current = pdfDoc.numPages;
+    setFileName(name);
+    setFilePath(path);
     setCurrentPage(page);
     setScale(zoom);
     setScrollMode(mode);
     setNumPages(pdfDoc.numPages);
-    numPagesRef.current = pdfDoc.numPages;
     setFileNotFound(false);
     setPdfLoaded(true);
     updateTabTitle(tabId, name.replace(/\.pdf$/i, ""));
@@ -335,7 +346,7 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
   const changePage = useCallback((next: number) => {
     const viewer = pdfViewerRef.current;
     if (!viewer || !pdfLoaded) return;
-    viewer.currentPageNumber = Math.max(1, Math.min(numPagesRef.current, next));
+    viewer.currentPageNumber = clampPage(next, numPagesRef.current);
   }, [pdfLoaded]);
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
@@ -401,6 +412,7 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
 
   function toggleScrollMode() {
     const next: ScrollMode = scrollMode === "continuous" ? "single" : "continuous";
+    scrollModeRef.current = next;
     setScrollMode(next);
     persist(currentPage, scale, next);
     const viewer = pdfViewerRef.current;
@@ -417,7 +429,7 @@ export function usePdfControls({ tabId, isActive }: UsePdfControlsOptions): PdfC
     const viewer = pdfViewerRef.current;
     if (!viewer || !pdfLoaded) return;
     pushCurrentAndSetFlag();
-    viewer.currentPageNumber = Math.max(1, Math.min(numPagesRef.current, page));
+    viewer.currentPageNumber = clampPage(page, numPagesRef.current);
   }
 
   function goBack() {

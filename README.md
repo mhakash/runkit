@@ -14,8 +14,10 @@ A personal desktop companion app built with Tauri + React + TypeScript. Tab-base
 - Continuous scroll and single-page view modes
 - Zoom in/out, go-to-page input
 - Collapsible bookmarks/TOC sidebar
-- Back/forward navigation history for bookmark jumps and page seeks
+- Back/forward navigation history for internal link clicks, bookmark jumps, and page seeks
 - Recent PDFs list with last-read page restored on reopen
+- Keyboard navigation — arrow keys scroll or flip pages, Space jumps a viewport, Home/End jump to first/last page
+- Pinch-to-zoom on trackpad
 
 ## Stack
 
