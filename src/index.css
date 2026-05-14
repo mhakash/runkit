@@ -67,7 +67,6 @@
     color: var(--color-text);
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
-    user-select: none;
   }
 
   ::-webkit-scrollbar {
