@@ -23,6 +23,7 @@ interface TabStore {
   setPdfState: (tabId: string, state: PdfTabState) => void;
   clearPdfState: (tabId: string) => void;
   upsertRecentPdf: (entry: Omit<RecentPdf, "lastOpenedAt">) => void;
+  openOrFocusSingletonTab: (path: string, title: string) => void;
 }
 
 const initialTab = createTab();
@@ -105,6 +106,18 @@ export const useTabStore = create<TabStore>((set, get) => ({
         recentPdfs: [{ ...entry, lastOpenedAt: Date.now() }, ...filtered],
       };
     });
+    scheduleSave(get);
+  },
+
+  openOrFocusSingletonTab: (path, title) => {
+    const { tabs } = get();
+    const existing = tabs.find((t) => t.path === path);
+    if (existing) {
+      set({ activeTabId: existing.id });
+    } else {
+      const tab = createTab(title, path);
+      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+    }
     scheduleSave(get);
   },
 }));

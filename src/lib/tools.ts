@@ -5,6 +5,7 @@ export interface Tool {
   icon: string;
   path: string;
   badge?: string;
+  singleton?: boolean;
 }
 
 export const TOOLS: Tool[] = [
@@ -23,5 +24,13 @@ export const TOOLS: Tool[] = [
     icon: "📄",
     path: "/tool/pdf-reader",
     badge: "New",
+  },
+  {
+    id: "todo",
+    name: "Todo",
+    description: "Feature-rich task manager with sections, priorities, due dates, and filters.",
+    icon: "✓",
+    path: "/tool/todo",
+    singleton: true,
   },
 ];

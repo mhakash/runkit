@@ -9,6 +9,13 @@ A personal desktop companion app built with Tauri + React + TypeScript. Tab-base
 - Each tab preserves full state (scroll position, open tools, form inputs) when inactive
 - Window size and position persist across sessions
 
+**Todo**
+- Task manager with sections, priorities, due dates, and notes
+- Filter by date, priority, section, or keyword — filters persist across restarts
+- Drag to reorder todos and sections
+- Completed todos collect in a separate section at the bottom
+- Opens in a single dedicated tab from anywhere
+
 **PDF Reader**
 - Open PDFs from disk with a native file picker
 - Continuous scroll and single-page view modes

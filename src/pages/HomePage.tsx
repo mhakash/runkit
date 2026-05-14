@@ -7,10 +7,15 @@ function ToolCard({ tool }: { tool: Tool }) {
   const navigate = useNavigate();
   const { tabId } = useTabContext();
   const updateTabTitle = useTabStore((s) => s.updateTabTitle);
+  const openOrFocusSingletonTab = useTabStore((s) => s.openOrFocusSingletonTab);
 
   function open() {
-    updateTabTitle(tabId, tool.name);
-    navigate(tool.path);
+    if (tool.singleton) {
+      openOrFocusSingletonTab(tool.path, tool.name);
+    } else {
+      updateTabTitle(tabId, tool.name);
+      navigate(tool.path);
+    }
   }
 
   return (

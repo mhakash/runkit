@@ -5,6 +5,7 @@ import { useTabStore } from "@/hooks/useTabStore";
 import { HomePage } from "@/pages/HomePage";
 import { HelloWorldPage } from "@/pages/HelloWorldPage";
 import { PdfReaderPage } from "@/pages/PdfReaderPage";
+import { TodoPage } from "@/pages/TodoPage";
 
 // Tracks the current route inside a tab's MemoryRouter and persists it.
 function RouteTracker({ tabId }: { tabId: string }) {
@@ -37,6 +38,7 @@ export function TabPanel({ tabId, isActive, initialPath }: TabPanelProps) {
             <Route path="/" element={<HomePage />} />
             <Route path="/tool/hello-world" element={<HelloWorldPage />} />
             <Route path="/tool/pdf-reader" element={<PdfReaderPage />} />
+            <Route path="/tool/todo" element={<TodoPage />} />
           </Routes>
         </MemoryRouter>
       </div>
