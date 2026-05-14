@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  --pdf-page-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
   --font-display: "DM Mono", monospace;
   --font-body: "DM Sans", sans-serif;
 
@@ -23,6 +24,7 @@
 
 /* ── Dim theme (cool blue-grey) ───────────────────────────────────────────── */
 [data-theme="dim"] {
+  --pdf-page-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   --color-surface:        #1e2029;
   --color-surface-1:      #252830;
   --color-surface-2:      #2d3039;
@@ -42,6 +44,7 @@
 
 /* ── Light theme (warm off-white) ─────────────────────────────────────────── */
 [data-theme="light"] {
+  --pdf-page-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
   --color-surface:        #f5f0eb;
   --color-surface-1:      #faf7f4;
   --color-surface-2:      #ede8e2;
@@ -67,7 +70,7 @@
 .pdfViewer .page {
   border: none;
   margin: 0 auto 16px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--pdf-page-shadow);
 }
 
 .pdfViewer .page canvas {

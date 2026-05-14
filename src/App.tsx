@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { TabBar } from "@/components/tab-bar/TabBar";
 import { TabPanel } from "@/components/layout/TabPanel";
 import { useTabStore } from "@/hooks/useTabStore";
@@ -7,8 +8,8 @@ import { loadSession } from "@/lib/session";
 import { loadSettings } from "@/lib/settings";
 
 function App() {
-  const { tabs, activeTabId, hydrated, hydrate } = useTabStore();
-  const { hydrated: settingsHydrated, hydrate: hydrateSettings } = useSettingsStore();
+  const { tabs, activeTabId, hydrated, hydrate, openOrFocusSingletonTab, addTabAtPath, addTab, closeTab } = useTabStore();
+  const { hydrated: settingsHydrated, hydrate: hydrateSettings, setTheme } = useSettingsStore();
 
   useEffect(() => {
     Promise.all([
@@ -25,6 +26,20 @@ function App() {
     // Run once on mount only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const unlisteners = [
+      listen("menu:open-settings", () => openOrFocusSingletonTab("/tool/settings", "Settings")),
+      listen("menu:open-todo", () => openOrFocusSingletonTab("/tool/todo", "Todo")),
+      listen("menu:open-pdf", () => addTabAtPath("/tool/pdf-reader", "PDF Reader")),
+      listen("menu:new-tab", () => addTab()),
+      listen("menu:close-tab", () => { if (tabs.length > 1) closeTab(activeTabId); }),
+      listen("menu:theme-dark",  () => setTheme("dark")),
+      listen("menu:theme-dim",   () => setTheme("dim")),
+      listen("menu:theme-light", () => setTheme("light")),
+    ];
+    return () => { unlisteners.forEach((p) => p.then((fn) => fn())); };
+  }, [openOrFocusSingletonTab, addTabAtPath, addTab, closeTab, tabs.length, activeTabId, setTheme]);
 
   if (!hydrated || !settingsHydrated) {
     return <div className="flex h-full w-full items-center justify-center bg-surface" />;
