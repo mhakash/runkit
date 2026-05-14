@@ -33,4 +33,12 @@ export const TOOLS: Tool[] = [
     path: "/tool/todo",
     singleton: true,
   },
+  {
+    id: "settings",
+    name: "Settings",
+    description: "Customize your Runkit experience — theme and more.",
+    icon: "⚙",
+    path: "/tool/settings",
+    singleton: true,
+  },
 ];

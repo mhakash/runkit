@@ -2,13 +2,20 @@ import { useEffect } from "react";
 import { TabBar } from "@/components/tab-bar/TabBar";
 import { TabPanel } from "@/components/layout/TabPanel";
 import { useTabStore } from "@/hooks/useTabStore";
+import { useSettingsStore } from "@/hooks/useSettingsStore";
 import { loadSession } from "@/lib/session";
+import { loadSettings } from "@/lib/settings";
 
 function App() {
   const { tabs, activeTabId, hydrated, hydrate } = useTabStore();
+  const { hydrated: settingsHydrated, hydrate: hydrateSettings } = useSettingsStore();
 
   useEffect(() => {
-    loadSession().then((session) => {
+    Promise.all([
+      loadSession(),
+      loadSettings(),
+    ]).then(([session, settings]) => {
+      hydrateSettings(settings.theme);
       if (session && session.tabs.length > 0) {
         hydrate(session.tabs, session.activeTabId, session.pdfStates ?? {}, session.recentPdfs ?? []);
       } else {
@@ -19,7 +26,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!hydrated) {
+  if (!hydrated || !settingsHydrated) {
     return <div className="flex h-full w-full items-center justify-center bg-surface" />;
   }
 

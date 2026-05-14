@@ -21,6 +21,44 @@
   --color-danger: #f87171;
 }
 
+/* ── Dim theme (cool blue-grey) ───────────────────────────────────────────── */
+[data-theme="dim"] {
+  --color-surface:        #1e2029;
+  --color-surface-1:      #252830;
+  --color-surface-2:      #2d3039;
+  --color-surface-3:      #363a45;
+  --color-border:         #3a3e4d;
+  --color-border-active:  #555a6e;
+  --color-text:           #d4d8e8;
+  --color-text-muted:     #7c82a0;
+  --color-text-dim:       #4a4f63;
+  --color-accent:         #7c6af7;
+  --color-accent-hover:   #9585f9;
+  --color-accent-dim:     #2d2653;
+  --color-success:        #3ecf8e;
+  --color-warning:        #f59e0b;
+  --color-danger:         #f87171;
+}
+
+/* ── Light theme (warm off-white) ─────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-surface:        #f5f0eb;
+  --color-surface-1:      #faf7f4;
+  --color-surface-2:      #ede8e2;
+  --color-surface-3:      #e0d9d1;
+  --color-border:         #d4ccc3;
+  --color-border-active:  #b5aca1;
+  --color-text:           #1e1a16;
+  --color-text-muted:     #7a6f65;
+  --color-text-dim:       #b5aca1;
+  --color-accent:         #6254d4;
+  --color-accent-hover:   #7c6af7;
+  --color-accent-dim:     #e8e4fb;
+  --color-success:        #1a9e6a;
+  --color-warning:        #c47d0a;
+  --color-danger:         #d94f4f;
+}
+
 /* ── pdf_viewer.css dark theme overrides ──────────────────────────────────── */
 #viewerContainer {
   background: var(--color-surface);
