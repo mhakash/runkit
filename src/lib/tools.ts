@@ -34,6 +34,14 @@ export const TOOLS: Tool[] = [
     singleton: true,
   },
   {
+    id: "csv-editor",
+    name: "CSV Editor",
+    description: "Open and edit CSV files with a fast virtualized spreadsheet grid.",
+    icon: "⊞",
+    path: "/tool/csv-editor",
+    badge: "New",
+  },
+  {
     id: "settings",
     name: "Settings",
     description: "Customize your Runkit experience — theme and more.",

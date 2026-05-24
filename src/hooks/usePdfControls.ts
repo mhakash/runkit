@@ -5,15 +5,12 @@ import { PDFViewer, EventBus, PDFLinkService, ScrollMode as PdfScrollMode } from
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile, exists } from "@tauri-apps/plugin-fs";
 import { useTabStore } from "@/hooks/useTabStore";
+import { fileNameFromPath } from "@/lib/utils";
 
 GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url
 ).toString();
-
-function fileNameFromPath(path: string): string {
-  return path.split("/").pop() ?? "document.pdf";
-}
 
 function clampPage(page: number, total: number): number {
   return Math.max(1, Math.min(total, page));

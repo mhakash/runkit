@@ -1,0 +1,567 @@
+import { useState, useRef, useEffect, useMemo, useCallback, type KeyboardEvent } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
+import {
+  FolderOpen, Save, Plus, Search, ChevronUp, ChevronDown,
+  FileText, AlertCircle, Table2, PencilLine, Trash2,
+  ArrowLeft, ArrowRight,
+} from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
+import { useCsvEditor } from "@/hooks/useCsvEditor";
+import { useTabContext } from "@/components/layout/TabContext";
+import { useTabStore } from "@/hooks/useTabStore";
+
+const ROW_HEIGHT = 28;
+const ROW_NUM_WIDTH = 48;
+const DEFAULT_COL_WIDTH = 160;
+
+type RowData = { cells: string[]; originalIndex: number };
+
+export function CsvEditorPage() {
+  const { tabId, isActive } = useTabContext();
+  const openOrFocusCsvFile = useTabStore((s) => s.openOrFocusCsvFile);
+  const tabs = useTabStore((s) => s.tabs);
+  const csvStates = useTabStore((s) => s.csvStates);
+  const setActiveTab = useTabStore((s) => s.setActiveTab);
+
+  const { state, actions, filteredRows, filteredToOriginal } = useCsvEditor({ tabId });
+  const {
+    headers, fileName, filePath: loadedFilePath, isDirty, loading,
+    error, filterText, sortConfig, selectedRows, rows,
+  } = state;
+  const {
+    saveFile, updateCell, addRow, deleteRows, addColumn,
+    deleteColumn, renameColumn, setSort, setFilter, setSelectedRows, clearError,
+  } = actions;
+
+  const [editingCell, setEditingCell] = useState<{ origRow: number; col: number } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [ctxMenu, setCtxMenu] = useState<{ col: number; x: number; y: number } | null>(null);
+  const [renamingCol, setRenamingCol] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [lastSelectedRow, setLastSelectedRow] = useState<number | null>(null);
+  const [addColAfter, setAddColAfter] = useState<number | null>(null);
+  const [newColName, setNewColName] = useState("");
+  const [colWidths, setColWidths] = useState<number[]>([]);
+
+  const parentRef = useRef<HTMLDivElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Stable ref for values read inside the keyboard listener so we don't re-register on every selection change
+  const kbStateRef = useRef({ isDirty, loadedFilePath, selectedRows, editingCell });
+  useEffect(() => { kbStateRef.current = { isDirty, loadedFilePath, selectedRows, editingCell }; });
+
+  useEffect(() => {
+    setColWidths(headers.map((_, i) => colWidths[i] ?? DEFAULT_COL_WIDTH));
+    // Reset only when columns are added/removed, not renamed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers.length]);
+
+  const tableData = useMemo<RowData[]>(
+    () => filteredRows.map((row, i) => ({ cells: row, originalIndex: filteredToOriginal[i] })),
+    [filteredRows, filteredToOriginal]
+  );
+
+  const columns = useMemo<ColumnDef<RowData>[]>(() => {
+    if (!headers.length) return [];
+    return [
+      { id: "__rn__", size: ROW_NUM_WIDTH },
+      ...headers.map((_, i) => ({
+        id: `c${i}`,
+        size: colWidths[i] ?? DEFAULT_COL_WIDTH,
+        accessorFn: (r: RowData) => r.cells[i] ?? "",
+      })),
+    ];
+  }, [headers, colWidths]);
+
+  const table = useReactTable({ data: tableData, columns, getCoreRowModel: getCoreRowModel() });
+  const trows = table.getRowModel().rows;
+
+  const virtualizer = useVirtualizer({
+    count: trows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 30,
+  });
+
+  useEffect(() => {
+    if (editingCell) editInputRef.current?.focus();
+  }, [editingCell]);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const h = () => setCtxMenu(null);
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!ctxMenu]);
+
+useEffect(() => {
+    if (!isActive) return;
+    const up = listen<{ paths: string[] }>("tauri://drag-drop", (e) => {
+      const path = e.payload.paths?.[0];
+      if (!path || !/\.(csv|tsv|txt)$/i.test(path)) return;
+      setIsDragOver(false);
+      if (!loadedFilePath) {
+        actions.loadFile(path);
+      } else {
+        openOrFocusCsvFile(path);
+      }
+    });
+    return () => { up.then((fn) => fn()); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, loadedFilePath]);
+
+  const onKey = useCallback((e: globalThis.KeyboardEvent) => {
+    const { isDirty, loadedFilePath, selectedRows, editingCell } = kbStateRef.current;
+    if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+      e.preventDefault();
+      if (isDirty && loadedFilePath) saveFile();
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && selectedRows.size > 0 && !editingCell) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag !== "INPUT" && tag !== "TEXTAREA") {
+        e.preventDefault();
+        deleteRows([...selectedRows]);
+      }
+    }
+  }, [saveFile, deleteRows]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isActive, onKey]);
+
+  async function handleOpenFile() {
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name: "CSV / TSV", extensions: ["csv", "tsv", "txt"] }],
+    });
+    if (!selected) return;
+    const path = selected as string;
+    const existing = tabs.find((t) => t.id !== tabId && csvStates[t.id]?.filePath === path);
+    if (existing) {
+      setActiveTab(existing.id);
+    } else {
+      actions.loadFile(path);
+    }
+  }
+
+  function commitEdit() {
+    if (!editingCell) return;
+    updateCell(editingCell.origRow, editingCell.col, editValue);
+    setEditingCell(null);
+  }
+
+  function handleCellKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+    if (e.key === "Escape") setEditingCell(null);
+    if (e.key === "Tab") { e.preventDefault(); commitEdit(); }
+  }
+
+  function handleRowNumClick(e: React.MouseEvent, origIdx: number, filteredIdx: number) {
+    setEditingCell(null);
+    if (e.shiftKey && lastSelectedRow !== null) {
+      const lo = filteredToOriginal.indexOf(lastSelectedRow);
+      const [mn, mx] = [Math.min(lo, filteredIdx), Math.max(lo, filteredIdx)];
+      setSelectedRows(new Set(filteredToOriginal.slice(mn, mx + 1)));
+    } else {
+      const already = selectedRows.has(origIdx) && selectedRows.size === 1;
+      setSelectedRows(already ? new Set() : new Set([origIdx]));
+      setLastSelectedRow(already ? null : origIdx);
+    }
+  }
+
+  function handleColCtx(e: React.MouseEvent, ci: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ col: ci, x: e.clientX, y: e.clientY });
+  }
+
+  function handleRenameCommit() {
+    if (renamingCol !== null) {
+      renameColumn(renamingCol, renameValue.trim() || headers[renamingCol]);
+      setRenamingCol(null);
+    }
+  }
+
+  const hasFile = headers.length > 0 || !!loadedFilePath;
+  const totalW = ROW_NUM_WIDTH + headers.reduce((s, _, i) => s + (colWidths[i] ?? DEFAULT_COL_WIDTH), 0);
+
+  if (!hasFile && !loading) {
+    return (
+      <div
+        className="flex flex-col h-full bg-surface overflow-hidden"
+        onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setIsDragOver(true); } }}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={(e) => e.preventDefault()}
+      >
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div
+            className={[
+              "flex flex-col items-center gap-5 p-10 rounded-2xl border-2 border-dashed transition-all duration-200 max-w-sm w-full",
+              isDragOver
+                ? "border-accent bg-accent-dim/60 scale-[1.02]"
+                : "border-border bg-surface-1 hover:border-border-active",
+            ].join(" ")}
+          >
+            <div className={[
+              "w-16 h-16 rounded-2xl flex items-center justify-center transition-colors",
+              isDragOver ? "bg-accent/20" : "bg-surface-2",
+            ].join(" ")}>
+              <Table2 size={28} className={isDragOver ? "text-accent" : "text-text-dim"} />
+            </div>
+
+            <div className="text-center space-y-1">
+              <p className="text-sm font-display text-text">Open a CSV file</p>
+              <p className="text-xs text-text-dim font-mono">.csv · .tsv · .txt · up to 100 MB</p>
+            </div>
+
+            <button
+              onClick={handleOpenFile}
+              className="flex items-center gap-2 px-5 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-display rounded-lg transition-colors"
+            >
+              <FolderOpen size={13} />
+              Browse Files
+            </button>
+
+            <p className="text-[11px] text-text-dim font-mono tracking-wide">— or drag &amp; drop here —</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden bg-surface">
+      <div className="flex items-center h-9 px-3 gap-2 border-b border-border bg-surface-1 shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0 max-w-[180px]">
+          <FileText size={11} className="text-text-dim shrink-0" />
+          <span className="text-xs font-display text-text-muted truncate">{fileName ?? "No file"}</span>
+          {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" title="Unsaved changes" />}
+        </div>
+
+        <div className="w-px h-4 bg-border shrink-0" />
+
+        <div className="flex items-center gap-1.5 w-56 bg-surface-2 border border-border rounded px-2 h-6 focus-within:border-border-active transition-colors">
+          <Search size={10} className="text-text-dim shrink-0" />
+          <input
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter rows…"
+            className="flex-1 bg-transparent text-xs font-mono text-text placeholder:text-text-dim outline-none min-w-0"
+          />
+          {filterText && (
+            <button onClick={() => setFilter("")} className="text-text-dim hover:text-text-muted leading-none">×</button>
+          )}
+        </div>
+
+        <div className="flex-1" />
+
+        <span className="text-[11px] font-mono text-text-dim shrink-0">
+          {filteredRows.length !== rows.length
+            ? `${filteredRows.length.toLocaleString()}/${rows.length.toLocaleString()}`
+            : rows.length.toLocaleString()}{" "}
+          rows · {headers.length} cols
+        </span>
+
+        <div className="w-px h-4 bg-border shrink-0" />
+
+        <div className="flex items-center gap-0.5">
+          <ToolBtn icon={<FolderOpen size={11} />} label="Open" onClick={handleOpenFile} />
+          <ToolBtn
+            icon={<Save size={11} />}
+            label="Save"
+            onClick={saveFile}
+            disabled={!isDirty || !loadedFilePath}
+          />
+          <div className="w-px h-4 bg-border mx-1 shrink-0" />
+          <ToolBtn icon={<Plus size={11} />} label="Row" onClick={() => addRow()} />
+          <ToolBtn
+            icon={<Plus size={11} />}
+            label="Col"
+            onClick={() => { setAddColAfter(headers.length - 1); setNewColName(""); }}
+          />
+          {selectedRows.size > 0 && (
+            <>
+              <div className="w-px h-4 bg-border mx-1 shrink-0" />
+              <button
+                onClick={() => deleteRows([...selectedRows])}
+                className="flex items-center gap-1 h-6 px-2 text-[11px] font-display text-danger hover:bg-danger/10 rounded transition-colors"
+              >
+                <Trash2 size={11} />
+                Delete {selectedRows.size}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-danger/10 border-b border-danger/20 text-danger text-xs font-mono shrink-0">
+          <AlertCircle size={10} />
+          <span className="flex-1 truncate">{error}</span>
+          <button onClick={clearError} className="hover:opacity-60 ml-1 text-sm leading-none">×</button>
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex-1 flex items-center justify-center">
+          <span className="text-xs font-mono text-text-muted animate-pulse">Loading…</span>
+        </div>
+      )}
+
+      {!loading && headers.length > 0 && (
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+          <div
+            ref={parentRef}
+            className="flex-1 overflow-auto min-h-0"
+            onClick={(e) => {
+              const target = e.target as HTMLElement;
+              if (!target.closest("[data-cell]") && !target.closest("[data-rownum]")) {
+                if (editingCell) commitEdit();
+                setSelectedRows(new Set());
+              }
+            }}
+          >
+            {/* Header is inside the scroll container so macOS rubber-band bounce is shared */}
+            <div
+              className="flex border-b border-border bg-surface-1 sticky top-0 z-10"
+              style={{ width: totalW, height: ROW_HEIGHT }}
+            >
+              <div
+                className="shrink-0 flex items-center justify-center border-r border-border text-[10px] font-display text-text-dim select-none"
+                style={{ width: ROW_NUM_WIDTH }}
+              >
+                #
+              </div>
+              {headers.map((h, ci) => (
+                <div
+                  key={ci}
+                  className="relative shrink-0 flex items-center border-r border-border cursor-pointer select-none hover:bg-surface-2 transition-colors group"
+                  style={{ width: colWidths[ci] ?? DEFAULT_COL_WIDTH, height: ROW_HEIGHT }}
+                  onClick={() => { if (renamingCol !== ci) setSort(ci); }}
+                  onContextMenu={(e) => handleColCtx(e, ci)}
+                >
+                  {renamingCol === ci ? (
+                    <input
+                      autoFocus
+                      className="absolute inset-0 px-2 bg-accent-dim text-accent text-xs font-display outline-none border border-accent z-10"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={handleRenameCommit}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRenameCommit();
+                        if (e.key === "Escape") setRenamingCol(null);
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <span className="flex-1 px-2 text-xs font-display text-text-muted truncate">{h}</span>
+                      {sortConfig?.colIndex === ci && (
+                        <span className="pr-1.5 text-accent shrink-0">
+                          {sortConfig.direction === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ height: virtualizer.getTotalSize(), width: totalW, position: "relative" }}>
+              {virtualizer.getVirtualItems().map((vr) => {
+                const row = trows[vr.index];
+                const rd = row.original;
+                const origIdx = rd.originalIndex;
+                const isSel = selectedRows.has(origIdx);
+                const isEven = vr.index % 2 === 0;
+
+                return (
+                  <div
+                    key={vr.key}
+                    data-index={vr.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      transform: `translateY(${vr.start}px)`,
+                      width: totalW,
+                      height: ROW_HEIGHT,
+                    }}
+                    className={[
+                      "flex border-b",
+                      isSel
+                        ? "bg-accent-dim border-accent/20"
+                        : isEven
+                        ? "bg-surface border-border hover:bg-surface-2"
+                        : "bg-surface-1 border-border hover:bg-surface-2",
+                    ].join(" ")}
+                  >
+                    <div
+                      data-rownum
+                      className={[
+                        "shrink-0 flex items-center justify-center border-r text-[10px] font-display cursor-pointer select-none transition-colors",
+                        isSel
+                          ? "border-accent/30 text-accent bg-accent/10"
+                          : "border-border text-text-dim hover:text-text-muted hover:bg-surface-3",
+                      ].join(" ")}
+                      style={{ width: ROW_NUM_WIDTH }}
+                      onClick={(e) => { e.stopPropagation(); handleRowNumClick(e, origIdx, vr.index); }}
+                    >
+                      {vr.index + 1}
+                    </div>
+
+                    {rd.cells.map((cell, ci) => {
+                      const isEditing = editingCell?.origRow === origIdx && editingCell?.col === ci;
+                      return (
+                        <div
+                          key={ci}
+                          data-cell
+                          className={[
+                            "shrink-0 relative border-r overflow-hidden",
+                            isSel ? "border-accent/20" : "border-border",
+                          ].join(" ")}
+                          style={{ width: colWidths[ci] ?? DEFAULT_COL_WIDTH, height: ROW_HEIGHT }}
+                          onDoubleClick={() => { setEditingCell({ origRow: origIdx, col: ci }); setEditValue(cell); }}
+                          onClick={() => { if (editingCell) commitEdit(); }}
+                        >
+                          {isEditing ? (
+                            <input
+                              ref={editInputRef}
+                              className="absolute inset-0 px-2 bg-accent-dim text-accent text-xs font-mono outline-none border border-accent z-10"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onBlur={commitEdit}
+                              onKeyDown={handleCellKeyDown}
+                            />
+                          ) : (
+                            <span className={[
+                              "absolute inset-0 flex items-center px-2 text-xs font-mono truncate",
+                              isSel ? "text-accent" : "text-text",
+                            ].join(" ")}>
+                              {cell}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ctxMenu && (
+        <div
+          className="fixed z-50 bg-surface-1 border border-border rounded-xl shadow-2xl py-1.5 min-w-[164px]"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <CtxItem
+            icon={<PencilLine size={11} />}
+            label="Rename"
+            onClick={() => { setRenamingCol(ctxMenu.col); setRenameValue(headers[ctxMenu.col]); setCtxMenu(null); }}
+          />
+          <CtxItem
+            icon={<ArrowLeft size={11} />}
+            label="Insert Left"
+            onClick={() => { setAddColAfter(ctxMenu.col - 1); setNewColName(""); setCtxMenu(null); }}
+          />
+          <CtxItem
+            icon={<ArrowRight size={11} />}
+            label="Insert Right"
+            onClick={() => { setAddColAfter(ctxMenu.col); setNewColName(""); setCtxMenu(null); }}
+          />
+          <div className="my-1 border-t border-border" />
+          <CtxItem
+            icon={<Trash2 size={11} />}
+            label="Delete Column"
+            danger
+            onClick={() => { deleteColumn(ctxMenu.col); setCtxMenu(null); }}
+          />
+        </div>
+      )}
+
+      {addColAfter !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setAddColAfter(null)}
+        >
+          <div
+            className="bg-surface-1 border border-border rounded-2xl p-5 w-72 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-[11px] font-display text-text-dim uppercase tracking-widest mb-3">New Column Name</p>
+            <input
+              autoFocus
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm font-mono text-text outline-none focus:border-accent transition-colors"
+              value={newColName}
+              onChange={(e) => setNewColName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newColName.trim()) { addColumn(newColName.trim(), addColAfter); setAddColAfter(null); }
+                if (e.key === "Escape") setAddColAfter(null);
+              }}
+              placeholder="column_name"
+            />
+            <div className="flex gap-2 mt-4 justify-end">
+              <button
+                onClick={() => setAddColAfter(null)}
+                className="px-3 py-1.5 text-xs font-display text-text-muted hover:text-text transition-colors rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { if (newColName.trim()) { addColumn(newColName.trim(), addColAfter); setAddColAfter(null); } }}
+                disabled={!newColName.trim()}
+                className="px-3 py-1.5 text-xs font-display bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Add Column
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolBtn({ icon, label, onClick, disabled }: {
+  icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-1 h-6 px-2 text-[11px] font-display text-text-muted hover:text-text hover:bg-surface-2 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function CtxItem({ icon, label, onClick, danger }: {
+  icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        "w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-display transition-colors",
+        danger ? "text-danger hover:bg-danger/10" : "text-text-muted hover:text-text hover:bg-surface-2",
+      ].join(" ")}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}

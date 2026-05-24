@@ -18,7 +18,7 @@ function App() {
     ]).then(([session, settings]) => {
       hydrateSettings(settings.theme);
       if (session && session.tabs.length > 0) {
-        hydrate(session.tabs, session.activeTabId, session.pdfStates ?? {}, session.recentPdfs ?? []);
+        hydrate(session.tabs, session.activeTabId, session.pdfStates ?? {}, session.recentPdfs ?? [], session.csvStates ?? {});
       } else {
         hydrate(tabs, activeTabId, {}, []);
       }

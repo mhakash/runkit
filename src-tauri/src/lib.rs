@@ -1,4 +1,5 @@
 mod menu;
+mod csv_commands;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -12,7 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, csv_commands::read_csv, csv_commands::write_csv])
         .setup(|app| menu::setup(app).map_err(|e| e.into()))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

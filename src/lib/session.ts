@@ -18,11 +18,16 @@ export interface RecentPdf {
   lastOpenedAt: number; // unix ms
 }
 
+export interface CsvTabState {
+  filePath: string;
+}
+
 export interface SessionData {
   tabs: Tab[];
   activeTabId: string;
   pdfStates: Record<string, PdfTabState>;
   recentPdfs: RecentPdf[];
+  csvStates: Record<string, CsvTabState>;
 }
 
 const SESSION_FILE = "session.json";
@@ -32,7 +37,9 @@ export async function loadSession(): Promise<SessionData | null> {
     const fileExists = await exists(SESSION_FILE, { baseDir: BaseDirectory.AppData });
     if (!fileExists) return null;
     const raw = await readTextFile(SESSION_FILE, { baseDir: BaseDirectory.AppData });
-    return JSON.parse(raw) as SessionData;
+    const data = JSON.parse(raw) as SessionData;
+    data.csvStates = data.csvStates ?? {};
+    return data;
   } catch {
     return null;
   }

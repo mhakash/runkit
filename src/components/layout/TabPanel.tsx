@@ -7,6 +7,7 @@ import { HelloWorldPage } from "@/pages/HelloWorldPage";
 import { PdfReaderPage } from "@/pages/PdfReaderPage";
 import { TodoPage } from "@/pages/TodoPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { CsvEditorPage } from "@/pages/CsvEditorPage";
 
 // Tracks the current route inside a tab's MemoryRouter and persists it.
 function RouteTracker({ tabId }: { tabId: string }) {
@@ -41,6 +42,7 @@ export function TabPanel({ tabId, isActive, initialPath }: TabPanelProps) {
             <Route path="/tool/pdf-reader" element={<PdfReaderPage />} />
             <Route path="/tool/todo" element={<TodoPage />} />
             <Route path="/tool/settings" element={<SettingsPage />} />
+            <Route path="/tool/csv-editor" element={<CsvEditorPage />} />
           </Routes>
         </MemoryRouter>
       </div>

@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import type { Tab } from "@/types/tab";
-import type { PdfTabState, RecentPdf } from "@/lib/session";
+import type { PdfTabState, CsvTabState, RecentPdf } from "@/lib/session";
 import { saveSession } from "@/lib/session";
+import { fileNameFromPath, stripExtension } from "@/lib/utils";
 
 function createTab(title = "Home", path = "/"): Tab {
   return { id: crypto.randomUUID(), title, path };
@@ -11,10 +12,11 @@ interface TabStore {
   tabs: Tab[];
   activeTabId: string;
   pdfStates: Record<string, PdfTabState>;
+  csvStates: Record<string, CsvTabState>;
   recentPdfs: RecentPdf[];
   hydrated: boolean;
 
-  hydrate: (tabs: Tab[], activeTabId: string, pdfStates: Record<string, PdfTabState>, recentPdfs: RecentPdf[]) => void;
+  hydrate: (tabs: Tab[], activeTabId: string, pdfStates: Record<string, PdfTabState>, recentPdfs: RecentPdf[], csvStates?: Record<string, CsvTabState>) => void;
   addTab: () => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
@@ -22,6 +24,9 @@ interface TabStore {
   updateTabPath: (id: string, path: string) => void;
   setPdfState: (tabId: string, state: PdfTabState) => void;
   clearPdfState: (tabId: string) => void;
+  setCsvState: (tabId: string, state: CsvTabState) => void;
+  clearCsvState: (tabId: string) => void;
+  openOrFocusCsvFile: (filePath: string) => void;
   upsertRecentPdf: (entry: Omit<RecentPdf, "lastOpenedAt">) => void;
   openOrFocusSingletonTab: (path: string, title: string) => void;
   addTabAtPath: (path: string, title: string) => void;
@@ -34,8 +39,8 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSave(get: () => TabStore) {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    const { tabs, activeTabId, pdfStates, recentPdfs } = get();
-    saveSession({ tabs, activeTabId, pdfStates, recentPdfs });
+    const { tabs, activeTabId, pdfStates, csvStates, recentPdfs } = get();
+    saveSession({ tabs, activeTabId, pdfStates, csvStates, recentPdfs });
   }, 300);
 }
 
@@ -43,11 +48,12 @@ export const useTabStore = create<TabStore>((set, get) => ({
   tabs: [initialTab],
   activeTabId: initialTab.id,
   pdfStates: {},
+  csvStates: {},
   recentPdfs: [],
   hydrated: false,
 
-  hydrate: (tabs, activeTabId, pdfStates, recentPdfs) => {
-    set({ tabs, activeTabId, pdfStates, recentPdfs: recentPdfs ?? [], hydrated: true });
+  hydrate: (tabs, activeTabId, pdfStates, recentPdfs, csvStates) => {
+    set({ tabs, activeTabId, pdfStates, csvStates: csvStates ?? {}, recentPdfs: recentPdfs ?? [], hydrated: true });
   },
 
   addTab: () => {
@@ -57,7 +63,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
   },
 
   closeTab: (id) => {
-    const { tabs, activeTabId, pdfStates } = get();
+    const { tabs, activeTabId, pdfStates, csvStates } = get();
     if (tabs.length === 1) return;
     const idx = tabs.findIndex((t) => t.id === id);
     const newTabs = tabs.filter((t) => t.id !== id);
@@ -67,7 +73,9 @@ export const useTabStore = create<TabStore>((set, get) => ({
         : activeTabId;
     const newPdfStates = { ...pdfStates };
     delete newPdfStates[id];
-    set({ tabs: newTabs, activeTabId: newActiveId, pdfStates: newPdfStates });
+    const newCsvStates = { ...csvStates };
+    delete newCsvStates[id];
+    set({ tabs: newTabs, activeTabId: newActiveId, pdfStates: newPdfStates, csvStates: newCsvStates });
     scheduleSave(get);
   },
 
@@ -107,6 +115,37 @@ export const useTabStore = create<TabStore>((set, get) => ({
         recentPdfs: [{ ...entry, lastOpenedAt: Date.now() }, ...filtered],
       };
     });
+    scheduleSave(get);
+  },
+
+  setCsvState: (tabId, state) => {
+    set((s) => ({ csvStates: { ...s.csvStates, [tabId]: state } }));
+    scheduleSave(get);
+  },
+
+  clearCsvState: (tabId) => {
+    set((s) => {
+      const next = { ...s.csvStates };
+      delete next[tabId];
+      return { csvStates: next };
+    });
+    scheduleSave(get);
+  },
+
+  openOrFocusCsvFile: (filePath) => {
+    const { tabs, csvStates } = get();
+    const existing = tabs.find((t) => csvStates[t.id]?.filePath === filePath);
+    if (existing) {
+      set({ activeTabId: existing.id });
+    } else {
+      const name = stripExtension(fileNameFromPath(filePath));
+      const tab = createTab(name, "/tool/csv-editor");
+      set((s) => ({
+        tabs: [...s.tabs, tab],
+        activeTabId: tab.id,
+        csvStates: { ...s.csvStates, [tab.id]: { filePath } },
+      }));
+    }
     scheduleSave(get);
   },
 
