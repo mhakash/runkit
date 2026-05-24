@@ -11,6 +11,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useCsvEditor } from "@/hooks/useCsvEditor";
 import { useTabContext } from "@/components/layout/TabContext";
 import { useTabStore } from "@/hooks/useTabStore";
+import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 28;
 const ROW_NUM_WIDTH = 48;
@@ -257,11 +258,11 @@ export function CsvEditorPage() {
         onDrop={(e) => e.preventDefault()}
       >
         <div className="flex-1 flex items-center justify-center px-6">
-          <div className={[
+          <div className={cn(
             "flex flex-col items-center gap-5 p-10 rounded-2xl border-2 border-dashed transition-all duration-200 max-w-sm w-full",
             isDragOver ? "border-accent bg-accent-dim/60 scale-[1.02]" : "border-border bg-surface-1 hover:border-border-active",
-          ].join(" ")}>
-            <div className={["w-16 h-16 rounded-2xl flex items-center justify-center transition-colors", isDragOver ? "bg-accent/20" : "bg-surface-2"].join(" ")}>
+          )}>
+            <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center transition-colors", isDragOver ? "bg-accent/20" : "bg-surface-2")}>
               <Table2 size={28} className={isDragOver ? "text-accent" : "text-text-dim"} />
             </div>
             <div className="text-center space-y-1">
@@ -448,22 +449,22 @@ export function CsvEditorPage() {
                     data-index={vr.index}
                     ref={virtualizer.measureElement}
                     style={{ position: "absolute", top: 0, transform: `translateY(${vr.start}px)`, width: totalW, height: ROW_HEIGHT }}
-                    className={[
+                    className={cn(
                       "flex border-b",
                       isSel
                         ? "bg-accent-dim border-accent/20"
                         : isEven ? "bg-surface border-border hover:bg-surface-2"
                         : "bg-surface-1 border-border hover:bg-surface-2",
-                    ].join(" ")}
+                    )}
                   >
                     <div
                       data-rownum
-                      className={[
+                      className={cn(
                         "shrink-0 flex items-center justify-center border-r text-[10px] font-display cursor-pointer select-none transition-colors",
                         isSel ? "border-accent/30 text-accent bg-accent/10"
                           : isActiveRow ? "border-border text-accent"
                           : "border-border text-text-dim hover:text-text-muted hover:bg-surface-3",
-                      ].join(" ")}
+                      )}
                       style={{ width: ROW_NUM_WIDTH }}
                       onClick={(e) => { e.stopPropagation(); handleRowNumClick(e, origIdx, vr.index); }}
                     >
@@ -477,12 +478,12 @@ export function CsvEditorPage() {
                         <div
                           key={ci}
                           data-cell
-                          className={[
+                          className={cn(
                             "shrink-0 relative border-r overflow-hidden",
                             isActive ? "border-accent ring-1 ring-accent ring-inset z-1"
                               : isSel ? "border-accent/20"
                               : "border-border",
-                          ].join(" ")}
+                          )}
                           style={{ width: colWidths[ci] ?? DEFAULT_COL_WIDTH, height: ROW_HEIGHT }}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -507,12 +508,12 @@ export function CsvEditorPage() {
                               onKeyDown={handleCellKeyDown}
                             />
                           ) : (
-                            <span className={[
+                            <span className={cn(
                               "absolute inset-0 flex items-center px-2 text-xs font-mono truncate",
                               isActive ? "bg-accent-dim text-accent"
                                 : isSel ? "text-accent"
                                 : "text-text",
-                            ].join(" ")}>
+                            )}>
                               {cell}
                             </span>
                           )}
@@ -587,7 +588,7 @@ function CtxItem({ icon, label, onClick, danger }: {
   icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean;
 }) {
   return (
-    <button onClick={onClick} className={["w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-display transition-colors", danger ? "text-danger hover:bg-danger/10" : "text-text-muted hover:text-text hover:bg-surface-2"].join(" ")}>
+    <button onClick={onClick} className={cn("w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-display transition-colors", danger ? "text-danger hover:bg-danger/10" : "text-text-muted hover:text-text hover:bg-surface-2")}>
       {icon}{label}
     </button>
   );
