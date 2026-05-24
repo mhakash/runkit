@@ -152,8 +152,11 @@ useEffect(() => {
 
   function commitEdit() {
     if (!editingCell) return;
-    updateCell(editingCell.origRow, editingCell.col, editValue);
+    const { origRow, col } = editingCell;
     setEditingCell(null);
+    if (editValue !== state.rows[origRow]?.[col]) {
+      updateCell(origRow, col, editValue);
+    }
   }
 
   function handleCellKeyDown(e: KeyboardEvent<HTMLInputElement>) {
@@ -429,8 +432,12 @@ useEffect(() => {
                             isSel ? "border-accent/20" : "border-border",
                           ].join(" ")}
                           style={{ width: colWidths[ci] ?? DEFAULT_COL_WIDTH, height: ROW_HEIGHT }}
-                          onDoubleClick={() => { setEditingCell({ origRow: origIdx, col: ci }); setEditValue(cell); }}
-                          onClick={() => { if (editingCell) commitEdit(); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (editingCell && (editingCell.origRow !== origIdx || editingCell.col !== ci)) commitEdit();
+                            setEditingCell({ origRow: origIdx, col: ci });
+                            setEditValue(cell);
+                          }}
                         >
                           {isEditing ? (
                             <input
