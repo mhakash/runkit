@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type KeyboardEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import {
-  FolderOpen, Save, Plus, Search, ChevronUp, ChevronDown,
-  FileText, AlertCircle, Table2, PencilLine, Trash2,
-  ArrowLeft, ArrowRight,
-} from "lucide-react";
+import { ChevronUp, ChevronDown, AlertCircle } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { useCsvEditor } from "@/hooks/useCsvEditor";
 import { useTabContext } from "@/components/layout/TabContext";
 import { useTabStore } from "@/hooks/useTabStore";
 import { cn } from "@/lib/utils";
+import { CsvEmptyState } from "@/components/csv/CsvEmptyState";
+import { CsvToolbar } from "@/components/csv/CsvToolbar";
+import { CsvFormulaBar } from "@/components/csv/CsvFormulaBar";
+import { CsvColumnContextMenu } from "@/components/csv/CsvColumnContextMenu";
+import { CsvAddColumnModal } from "@/components/csv/CsvAddColumnModal";
 
 const ROW_HEIGHT = 28;
 const ROW_NUM_WIDTH = 48;
@@ -51,7 +52,6 @@ export function CsvEditorPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [lastSelectedRow, setLastSelectedRow] = useState<number | null>(null);
   const [addColAfter, setAddColAfter] = useState<number | null>(null);
-  const [newColName, setNewColName] = useState("");
   const [colWidths, setColWidths] = useState<number[]>([]);
 
   const parentRef = useRef<HTMLDivElement>(null);
@@ -146,14 +146,12 @@ export function CsvEditorPage() {
     const tag = (e.target as HTMLElement).tagName;
     const inInput = tag === "INPUT" || tag === "TEXTAREA";
 
-    // Save
     if ((e.metaKey || e.ctrlKey) && e.key === "s") {
       e.preventDefault();
       if (isDirty && loadedFilePath) saveFile();
       return;
     }
 
-    // Delete selected rows (when no cell is being edited)
     if ((e.key === "Delete" || e.key === "Backspace") && selectedRows.size > 0 && !isEditing && !inInput) {
       e.preventDefault();
       deleteRows([...selectedRows]);
@@ -165,28 +163,23 @@ export function CsvEditorPage() {
     const { filteredRow, col } = activeCell;
 
     if (isEditing) {
-      // Commit + move on Enter/Tab; cancel on Escape — arrows stay in input
       if (e.key === "Escape") { e.preventDefault(); setIsEditing(false); setEditValue(filteredRows[filteredRow]?.[col] ?? ""); }
       if (e.key === "Enter") { e.preventDefault(); commitEdit(); navigateTo(filteredRow + 1, col); }
       if (e.key === "Tab") { e.preventDefault(); commitEdit(); navigateTo(filteredRow, col + (e.shiftKey ? -1 : 1)); }
       return;
     }
 
-    // Navigation when not editing
     switch (e.key) {
       case "ArrowDown":  e.preventDefault(); navigateTo(filteredRow + 1, col); break;
       case "ArrowUp":    e.preventDefault(); navigateTo(filteredRow - 1, col); break;
       case "ArrowRight": e.preventDefault(); navigateTo(filteredRow, col + 1); break;
       case "ArrowLeft":  e.preventDefault(); navigateTo(filteredRow, col - 1); break;
       case "Tab":        e.preventDefault(); navigateTo(filteredRow, col + (e.shiftKey ? -1 : 1)); break;
-      case "Enter":      e.preventDefault(); navigateTo(filteredRow, col, true); break; // enter edit
+      case "Enter":      e.preventDefault(); navigateTo(filteredRow, col, true); break;
       case "Escape":     setActiveCell(null); break;
       default:
-        // Printable key while not editing → start edit with that character
         if (!inInput && e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
-          if (kbRef.current.editValue !== (filteredRows[filteredRow]?.[col] ?? "")) {
-            // already changed via formula bar; don't override
-          } else {
+          if (kbRef.current.editValue === (filteredRows[filteredRow]?.[col] ?? "")) {
             setEditValue(e.key);
           }
           setIsEditing(true);
@@ -214,7 +207,6 @@ export function CsvEditorPage() {
   }
 
   function handleCellKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    // Enter/Tab/Escape handled by global onKey; stop propagation to avoid double-fire
     if (["Enter", "Tab", "Escape"].includes(e.key)) e.stopPropagation();
   }
 
@@ -233,132 +225,57 @@ export function CsvEditorPage() {
     }
   }
 
-  function handleColCtx(e: React.MouseEvent, ci: number) {
-    e.preventDefault();
-    e.stopPropagation();
-    setCtxMenu({ col: ci, x: e.clientX, y: e.clientY });
-  }
-
-  function handleRenameCommit() {
-    if (renamingCol !== null) {
-      renameColumn(renamingCol, renameValue.trim() || headers[renamingCol]);
-      setRenamingCol(null);
-    }
-  }
-
   const hasFile = headers.length > 0 || !!loadedFilePath;
   const totalW = ROW_NUM_WIDTH + headers.reduce((s, _, i) => s + (colWidths[i] ?? DEFAULT_COL_WIDTH), 0);
+  const activeCellOrigRow = activeCell != null ? filteredToOriginal[activeCell.filteredRow] : null;
 
   if (!hasFile && !loading) {
     return (
-      <div
-        className="flex flex-col h-full bg-surface overflow-hidden"
+      <CsvEmptyState
+        isDragOver={isDragOver}
+        onOpen={handleOpenFile}
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setIsDragOver(true); } }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={(e) => e.preventDefault()}
-      >
-        <div className="flex-1 flex items-center justify-center px-6">
-          <div className={cn(
-            "flex flex-col items-center gap-5 p-10 rounded-2xl border-2 border-dashed transition-all duration-200 max-w-sm w-full",
-            isDragOver ? "border-accent bg-accent-dim/60 scale-[1.02]" : "border-border bg-surface-1 hover:border-border-active",
-          )}>
-            <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center transition-colors", isDragOver ? "bg-accent/20" : "bg-surface-2")}>
-              <Table2 size={28} className={isDragOver ? "text-accent" : "text-text-dim"} />
-            </div>
-            <div className="text-center space-y-1">
-              <p className="text-sm font-display text-text">Open a CSV file</p>
-              <p className="text-xs text-text-dim font-mono">.csv · .tsv · .txt · up to 100 MB</p>
-            </div>
-            <button onClick={handleOpenFile} className="flex items-center gap-2 px-5 py-2 bg-accent hover:bg-accent-hover text-white text-xs font-display rounded-lg transition-colors">
-              <FolderOpen size={13} />
-              Browse Files
-            </button>
-            <p className="text-[11px] text-text-dim font-mono tracking-wide">— or drag &amp; drop here —</p>
-          </div>
-        </div>
-      </div>
+      />
     );
   }
 
-  const activeCellOrigRow = activeCell != null ? filteredToOriginal[activeCell.filteredRow] : null;
-
   return (
     <div className="flex flex-col h-full overflow-hidden bg-surface">
-      {/* Main toolbar */}
-      <div className="flex items-center h-9 px-3 gap-2 border-b border-border bg-surface-1 shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0 max-w-[180px]">
-          <FileText size={11} className="text-text-dim shrink-0" />
-          <span className="text-xs font-display text-text-muted truncate">{fileName ?? "No file"}</span>
-          {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" title="Unsaved changes" />}
-        </div>
+      <CsvToolbar
+        fileName={fileName}
+        isDirty={isDirty}
+        filterText={filterText}
+        rowCount={rows.length}
+        filteredRowCount={filteredRows.length}
+        colCount={headers.length}
+        selectedRowCount={selectedRows.size}
+        canSave={isDirty && !!loadedFilePath}
+        onOpen={handleOpenFile}
+        onSave={saveFile}
+        onAddRow={() => addRow()}
+        onAddCol={() => setAddColAfter(headers.length - 1)}
+        onDeleteSelected={() => deleteRows([...selectedRows])}
+        onFilterChange={setFilter}
+      />
 
-        <div className="w-px h-4 bg-border shrink-0" />
-
-        <div className="flex items-center gap-1.5 w-56 bg-surface-2 border border-border rounded px-2 h-6 focus-within:border-border-active transition-colors">
-          <Search size={10} className="text-text-dim shrink-0" />
-          <input
-            type="text"
-            value={filterText}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter rows…"
-            className="flex-1 bg-transparent text-xs font-mono text-text placeholder:text-text-dim outline-none min-w-0"
-          />
-          {filterText && <button onClick={() => setFilter("")} className="text-text-dim hover:text-text-muted leading-none">×</button>}
-        </div>
-
-        <div className="flex-1" />
-
-        <span className="text-[11px] font-mono text-text-dim shrink-0">
-          {filteredRows.length !== rows.length
-            ? `${filteredRows.length.toLocaleString()}/${rows.length.toLocaleString()}`
-            : rows.length.toLocaleString()}{" "}
-          rows · {headers.length} cols
-        </span>
-
-        <div className="w-px h-4 bg-border shrink-0" />
-
-        <div className="flex items-center gap-0.5">
-          <ToolBtn icon={<FolderOpen size={11} />} label="Open" onClick={handleOpenFile} />
-          <ToolBtn icon={<Save size={11} />} label="Save" onClick={saveFile} disabled={!isDirty || !loadedFilePath} />
-          <div className="w-px h-4 bg-border mx-1 shrink-0" />
-          <ToolBtn icon={<Plus size={11} />} label="Row" onClick={() => addRow()} />
-          <ToolBtn icon={<Plus size={11} />} label="Col" onClick={() => { setAddColAfter(headers.length - 1); setNewColName(""); }} />
-          {selectedRows.size > 0 && (
-            <>
-              <div className="w-px h-4 bg-border mx-1 shrink-0" />
-              <button onClick={() => deleteRows([...selectedRows])} className="flex items-center gap-1 h-6 px-2 text-[11px] font-display text-danger hover:bg-danger/10 rounded transition-colors">
-                <Trash2 size={11} />
-                Delete {selectedRows.size}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Formula bar */}
       {headers.length > 0 && (
-        <div className="flex items-center h-8 px-2 gap-2 border-b border-border bg-surface shrink-0">
-          <div className="flex items-center justify-center w-32 shrink-0 h-6 rounded bg-surface-2 border border-border px-2 overflow-hidden">
-            <span className="text-[11px] font-display text-accent font-medium tracking-wide whitespace-nowrap truncate">
-              {activeCell ? `R${(activeCellOrigRow ?? activeCell.filteredRow) + 1} × C${activeCell.col + 1}` : "—"}
-            </span>
-          </div>
-          <div className="w-px h-4 bg-border shrink-0" />
-          <input
-            ref={formulaBarRef}
-            className="flex-1 h-6 bg-transparent text-xs font-mono text-text outline-none placeholder:text-text-dim px-1"
-            placeholder="Click a cell to edit"
-            value={activeCell ? editValue : ""}
-            readOnly={!activeCell}
-            onChange={(e) => setEditValue(e.target.value)}
-            onFocus={() => { if (activeCell) setIsEditing(true); }}
-            onKeyDown={(e) => {
-              if (!activeCell) return;
-              if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
-              if (e.key === "Escape") { setIsEditing(false); setEditValue(filteredRows[activeCell.filteredRow]?.[activeCell.col] ?? ""); }
-            }}
-          />
-        </div>
+        <CsvFormulaBar
+          cellAddress={activeCell ? `R${(activeCellOrigRow ?? activeCell.filteredRow) + 1} × C${activeCell.col + 1}` : null}
+          value={activeCell ? editValue : ""}
+          isReadOnly={!activeCell}
+          onChange={setEditValue}
+          onFocus={() => { if (activeCell) setIsEditing(true); }}
+          onCommit={() => { if (activeCell) commitEdit(); }}
+          onCancel={() => {
+            if (activeCell) {
+              setIsEditing(false);
+              setEditValue(filteredRows[activeCell.filteredRow]?.[activeCell.col] ?? "");
+            }
+          }}
+          inputRef={formulaBarRef}
+        />
       )}
 
       {error && (
@@ -404,7 +321,7 @@ export function CsvEditorPage() {
                   className="relative shrink-0 flex items-center border-r border-border cursor-pointer select-none hover:bg-surface-2 transition-colors"
                   style={{ width: colWidths[ci] ?? DEFAULT_COL_WIDTH, height: ROW_HEIGHT }}
                   onClick={() => { if (renamingCol !== ci) setSort(ci); }}
-                  onContextMenu={(e) => handleColCtx(e, ci)}
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setCtxMenu({ col: ci, x: e.clientX, y: e.clientY }); }}
                 >
                   {renamingCol === ci ? (
                     <input
@@ -412,9 +329,9 @@ export function CsvEditorPage() {
                       className="absolute inset-0 px-2 bg-accent-dim text-accent text-xs font-display outline-none border border-accent z-10"
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
-                      onBlur={handleRenameCommit}
+                      onBlur={() => { if (renamingCol !== null) { renameColumn(renamingCol, renameValue.trim() || headers[renamingCol]); setRenamingCol(null); } }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") handleRenameCommit();
+                        if (e.key === "Enter") { renameColumn(renamingCol, renameValue.trim() || headers[renamingCol]); setRenamingCol(null); }
                         if (e.key === "Escape") setRenamingCol(null);
                         e.stopPropagation();
                       }}
@@ -529,67 +446,23 @@ export function CsvEditorPage() {
       )}
 
       {ctxMenu && (
-        <div
-          className="fixed z-50 bg-surface-1 border border-border rounded-xl shadow-2xl py-1.5 min-w-[164px]"
-          style={{ left: ctxMenu.x, top: ctxMenu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <CtxItem icon={<PencilLine size={11} />} label="Rename" onClick={() => { setRenamingCol(ctxMenu.col); setRenameValue(headers[ctxMenu.col]); setCtxMenu(null); }} />
-          <CtxItem icon={<ArrowLeft size={11} />} label="Insert Left" onClick={() => { setAddColAfter(ctxMenu.col - 1); setNewColName(""); setCtxMenu(null); }} />
-          <CtxItem icon={<ArrowRight size={11} />} label="Insert Right" onClick={() => { setAddColAfter(ctxMenu.col); setNewColName(""); setCtxMenu(null); }} />
-          <div className="my-1 border-t border-border" />
-          <CtxItem icon={<Trash2 size={11} />} label="Delete Column" danger onClick={() => { deleteColumn(ctxMenu.col); setCtxMenu(null); }} />
-        </div>
+        <CsvColumnContextMenu
+          col={ctxMenu.col}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onRename={(col) => { setRenamingCol(col); setRenameValue(headers[col]); setCtxMenu(null); }}
+          onInsertLeft={(col) => { setAddColAfter(col - 1); setCtxMenu(null); }}
+          onInsertRight={(col) => { setAddColAfter(col); setCtxMenu(null); }}
+          onDelete={(col) => { deleteColumn(col); setCtxMenu(null); }}
+        />
       )}
 
       {addColAfter !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setAddColAfter(null)}>
-          <div className="bg-surface-1 border border-border rounded-2xl p-5 w-72 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <p className="text-[11px] font-display text-text-dim uppercase tracking-widest mb-3">New Column Name</p>
-            <input
-              autoFocus
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm font-mono text-text outline-none focus:border-accent transition-colors"
-              value={newColName}
-              onChange={(e) => setNewColName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newColName.trim()) { addColumn(newColName.trim(), addColAfter); setAddColAfter(null); }
-                if (e.key === "Escape") setAddColAfter(null);
-              }}
-              placeholder="column_name"
-            />
-            <div className="flex gap-2 mt-4 justify-end">
-              <button onClick={() => setAddColAfter(null)} className="px-3 py-1.5 text-xs font-display text-text-muted hover:text-text transition-colors rounded-lg">Cancel</button>
-              <button
-                onClick={() => { if (newColName.trim()) { addColumn(newColName.trim(), addColAfter); setAddColAfter(null); } }}
-                disabled={!newColName.trim()}
-                className="px-3 py-1.5 text-xs font-display bg-accent text-white rounded-lg hover:bg-accent-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                Add Column
-              </button>
-            </div>
-          </div>
-        </div>
+        <CsvAddColumnModal
+          onConfirm={(name) => { addColumn(name, addColAfter); setAddColAfter(null); }}
+          onCancel={() => setAddColAfter(null)}
+        />
       )}
     </div>
-  );
-}
-
-function ToolBtn({ icon, label, onClick, disabled }: {
-  icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean;
-}) {
-  return (
-    <button onClick={onClick} disabled={disabled} className="flex items-center gap-1 h-6 px-2 text-[11px] font-display text-text-muted hover:text-text hover:bg-surface-2 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-      {icon}{label}
-    </button>
-  );
-}
-
-function CtxItem({ icon, label, onClick, danger }: {
-  icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean;
-}) {
-  return (
-    <button onClick={onClick} className={cn("w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-display transition-colors", danger ? "text-danger hover:bg-danger/10" : "text-text-muted hover:text-text hover:bg-surface-2")}>
-      {icon}{label}
-    </button>
   );
 }
