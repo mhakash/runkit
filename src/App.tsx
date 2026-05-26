@@ -8,7 +8,7 @@ import { loadSession } from "@/lib/session";
 import { loadSettings } from "@/lib/settings";
 
 function App() {
-  const { tabs, activeTabId, hydrated, hydrate, openOrFocusSingletonTab, addTabAtPath, addTab, closeTab, flushSave } = useTabStore();
+  const { tabs, tabInsertionOrder, activeTabId, hydrated, hydrate, openOrFocusSingletonTab, addTabAtPath, addTab, closeTab, flushSave } = useTabStore();
   const { hydrated: settingsHydrated, hydrate: hydrateSettings, setTheme } = useSettingsStore();
 
   useEffect(() => {
@@ -54,14 +54,18 @@ function App() {
     <div className="flex flex-col h-full w-full overflow-hidden">
       <TabBar />
       <div className="relative flex-1 overflow-hidden">
-        {tabs.map((tab) => (
-          <TabPanel
-            key={tab.id}
-            tabId={tab.id}
-            isActive={tab.id === activeTabId}
-            initialPath={tab.path}
-          />
-        ))}
+        {tabInsertionOrder.map((id) => {
+          const tab = tabs.find((t) => t.id === id);
+          if (!tab) return null;
+          return (
+            <TabPanel
+              key={tab.id}
+              tabId={tab.id}
+              isActive={tab.id === activeTabId}
+              initialPath={tab.path}
+            />
+          );
+        })}
       </div>
     </div>
   );

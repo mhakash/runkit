@@ -10,6 +10,7 @@ function createTab(title = "Home", path = "/"): Tab {
 
 interface TabStore {
   tabs: Tab[];
+  tabInsertionOrder: string[];
   activeTabId: string;
   pdfStates: Record<string, PdfTabState>;
   csvStates: Record<string, CsvTabState>;
@@ -30,6 +31,7 @@ interface TabStore {
   upsertRecentPdf: (entry: Omit<RecentPdf, "lastOpenedAt">) => void;
   openOrFocusSingletonTab: (path: string, title: string) => void;
   addTabAtPath: (path: string, title: string) => void;
+  reorderTabs: (fromId: string, toId: string) => void;
   flushSave: () => void;
 }
 
@@ -51,6 +53,7 @@ function scheduleSave(get: () => TabStore) {
 
 export const useTabStore = create<TabStore>((set, get) => ({
   tabs: [initialTab],
+  tabInsertionOrder: [initialTab.id],
   activeTabId: initialTab.id,
   pdfStates: {},
   csvStates: {},
@@ -58,14 +61,14 @@ export const useTabStore = create<TabStore>((set, get) => ({
   hydrated: false,
 
   hydrate: (tabs, activeTabId, pdfStates, recentPdfs, csvStates) => {
-    set({ tabs, activeTabId, pdfStates, csvStates: csvStates ?? {}, recentPdfs: recentPdfs ?? [], hydrated: true });
+    set({ tabs, tabInsertionOrder: tabs.map((t) => t.id), activeTabId, pdfStates, csvStates: csvStates ?? {}, recentPdfs: recentPdfs ?? [], hydrated: true });
   },
 
   flushSave: () => saveNow(get),
 
   addTab: () => {
     const tab = createTab();
-    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+    set((s) => ({ tabs: [...s.tabs, tab], tabInsertionOrder: [...s.tabInsertionOrder, tab.id], activeTabId: tab.id }));
     saveNow(get);
   },
 
@@ -82,7 +85,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
     delete newPdfStates[id];
     const newCsvStates = { ...csvStates };
     delete newCsvStates[id];
-    set({ tabs: newTabs, activeTabId: newActiveId, pdfStates: newPdfStates, csvStates: newCsvStates });
+    set((s) => ({ tabs: newTabs, tabInsertionOrder: s.tabInsertionOrder.filter((i) => i !== id), activeTabId: newActiveId, pdfStates: newPdfStates, csvStates: newCsvStates }));
     saveNow(get);
   },
 
@@ -149,6 +152,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
       const tab = createTab(name, "/tool/csv-editor");
       set((s) => ({
         tabs: [...s.tabs, tab],
+        tabInsertionOrder: [...s.tabInsertionOrder, tab.id],
         activeTabId: tab.id,
         csvStates: { ...s.csvStates, [tab.id]: { filePath } },
       }));
@@ -158,7 +162,19 @@ export const useTabStore = create<TabStore>((set, get) => ({
 
   addTabAtPath: (path, title) => {
     const tab = createTab(title, path);
-    set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+    set((s) => ({ tabs: [...s.tabs, tab], tabInsertionOrder: [...s.tabInsertionOrder, tab.id], activeTabId: tab.id }));
+    saveNow(get);
+  },
+
+  reorderTabs: (fromId, toId) => {
+    const { tabs } = get();
+    const from = tabs.findIndex((t) => t.id === fromId);
+    const to = tabs.findIndex((t) => t.id === toId);
+    if (from === -1 || to === -1 || from === to) return;
+    const next = [...tabs];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    set({ tabs: next });
     saveNow(get);
   },
 
@@ -169,7 +185,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
       set({ activeTabId: existing.id });
     } else {
       const tab = createTab(title, path);
-      set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
+      set((s) => ({ tabs: [...s.tabs, tab], tabInsertionOrder: [...s.tabInsertionOrder, tab.id], activeTabId: tab.id }));
     }
     saveNow(get);
   },

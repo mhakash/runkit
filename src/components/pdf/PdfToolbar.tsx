@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  ArrowLeft, FileText, ChevronLeft, ChevronRight,
+  FileText, ChevronLeft, ChevronRight,
   ZoomIn, ZoomOut, Rows2, BookOpen, PanelLeft, Undo2, Redo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -91,15 +91,6 @@ export function PdfToolbar({ controls }: { controls: PdfControls }) {
 
   return (
     <div className="flex items-center gap-3 px-4 h-10 border-b border-border shrink-0 bg-surface-1">
-      <button
-        onClick={actions.goHome}
-        className="flex items-center gap-1 text-xs transition-colors shrink-0 text-text-muted hover:text-text"
-      >
-        <ArrowLeft size={12} /> Back
-      </button>
-
-      <Divider />
-
       {state.pdfLoaded && (
         <>
           <ToolbarBtn

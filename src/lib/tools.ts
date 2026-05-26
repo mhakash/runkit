@@ -24,6 +24,7 @@ export const TOOLS: Tool[] = [
     icon: "📄",
     path: "/tool/pdf-reader",
     badge: "New",
+    singleton: true,
   },
   {
     id: "todo",
