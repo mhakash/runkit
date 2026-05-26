@@ -60,6 +60,7 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
   const updateTabTitle = useTabStore((s) => s.updateTabTitle);
   const setCsvState = useTabStore((s) => s.setCsvState);
   const savedCsvState = useTabStore((s) => s.csvStates[tabId]);
+  const hydrated = useTabStore((s) => s.hydrated);
 
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
@@ -75,11 +76,11 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
   const restoredRef = useRef(false);
 
   useEffect(() => {
-    if (restoredRef.current || !savedCsvState) return;
+    if (restoredRef.current || !hydrated || !savedCsvState) return;
     restoredRef.current = true;
     loadFile(savedCsvState.filePath).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hydrated]);
 
   async function loadFile(path: string) {
     setLoading(true);

@@ -30,18 +30,23 @@ interface TabStore {
   upsertRecentPdf: (entry: Omit<RecentPdf, "lastOpenedAt">) => void;
   openOrFocusSingletonTab: (path: string, title: string) => void;
   addTabAtPath: (path: string, title: string) => void;
+  flushSave: () => void;
 }
 
 const initialTab = createTab();
 
-// Debounced save — batches rapid updates (e.g. page scroll) into one write
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function saveNow(get: () => TabStore) {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  const { tabs, activeTabId, pdfStates, csvStates, recentPdfs } = get();
+  saveSession({ tabs, activeTabId, pdfStates, csvStates, recentPdfs });
+}
+
+// Only for high-frequency ephemeral updates (PDF scroll position, zoom level)
 function scheduleSave(get: () => TabStore) {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const { tabs, activeTabId, pdfStates, csvStates, recentPdfs } = get();
-    saveSession({ tabs, activeTabId, pdfStates, csvStates, recentPdfs });
-  }, 300);
+  saveTimer = setTimeout(() => saveNow(get), 1000);
 }
 
 export const useTabStore = create<TabStore>((set, get) => ({
@@ -56,10 +61,12 @@ export const useTabStore = create<TabStore>((set, get) => ({
     set({ tabs, activeTabId, pdfStates, csvStates: csvStates ?? {}, recentPdfs: recentPdfs ?? [], hydrated: true });
   },
 
+  flushSave: () => saveNow(get),
+
   addTab: () => {
     const tab = createTab();
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
-    scheduleSave(get);
+    saveNow(get);
   },
 
   closeTab: (id) => {
@@ -76,7 +83,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
     const newCsvStates = { ...csvStates };
     delete newCsvStates[id];
     set({ tabs: newTabs, activeTabId: newActiveId, pdfStates: newPdfStates, csvStates: newCsvStates });
-    scheduleSave(get);
+    saveNow(get);
   },
 
   setActiveTab: (id) => {
@@ -91,7 +98,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
 
   updateTabPath: (id, path) => {
     set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, path } : t)) }));
-    scheduleSave(get);
+    saveNow(get);
   },
 
   setPdfState: (tabId, state) => {
@@ -105,7 +112,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
       delete next[tabId];
       return { pdfStates: next };
     });
-    scheduleSave(get);
+    saveNow(get);
   },
 
   upsertRecentPdf: (entry) => {
@@ -120,7 +127,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
 
   setCsvState: (tabId, state) => {
     set((s) => ({ csvStates: { ...s.csvStates, [tabId]: state } }));
-    scheduleSave(get);
+    saveNow(get);
   },
 
   clearCsvState: (tabId) => {
@@ -129,7 +136,7 @@ export const useTabStore = create<TabStore>((set, get) => ({
       delete next[tabId];
       return { csvStates: next };
     });
-    scheduleSave(get);
+    saveNow(get);
   },
 
   openOrFocusCsvFile: (filePath) => {
@@ -146,13 +153,13 @@ export const useTabStore = create<TabStore>((set, get) => ({
         csvStates: { ...s.csvStates, [tab.id]: { filePath } },
       }));
     }
-    scheduleSave(get);
+    saveNow(get);
   },
 
   addTabAtPath: (path, title) => {
     const tab = createTab(title, path);
     set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
-    scheduleSave(get);
+    saveNow(get);
   },
 
   openOrFocusSingletonTab: (path, title) => {
@@ -164,6 +171,6 @@ export const useTabStore = create<TabStore>((set, get) => ({
       const tab = createTab(title, path);
       set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }));
     }
-    scheduleSave(get);
+    saveNow(get);
   },
 }));

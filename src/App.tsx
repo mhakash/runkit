@@ -8,7 +8,7 @@ import { loadSession } from "@/lib/session";
 import { loadSettings } from "@/lib/settings";
 
 function App() {
-  const { tabs, activeTabId, hydrated, hydrate, openOrFocusSingletonTab, addTabAtPath, addTab, closeTab } = useTabStore();
+  const { tabs, activeTabId, hydrated, hydrate, openOrFocusSingletonTab, addTabAtPath, addTab, closeTab, flushSave } = useTabStore();
   const { hydrated: settingsHydrated, hydrate: hydrateSettings, setTheme } = useSettingsStore();
 
   useEffect(() => {
@@ -26,6 +26,11 @@ function App() {
     // Run once on mount only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    window.addEventListener("blur", flushSave);
+    return () => window.removeEventListener("blur", flushSave);
+  }, [flushSave]);
 
   useEffect(() => {
     const unlisteners = [

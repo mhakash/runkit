@@ -226,7 +226,8 @@ export function CsvEditorPage() {
     }
   }
 
-  const hasFile = headers.length > 0 || !!loadedFilePath;
+  const savedFilePath = useTabStore((s) => s.csvStates[tabId]?.filePath);
+  const hasFile = headers.length > 0 || !!loadedFilePath || !!savedFilePath;
   const totalW = ROW_NUM_WIDTH + headers.reduce((s, _, i) => s + (colWidths[i] ?? DEFAULT_COL_WIDTH), 0);
   const activeCellOrigRow = activeCell != null ? filteredToOriginal[activeCell.filteredRow] : null;
 
