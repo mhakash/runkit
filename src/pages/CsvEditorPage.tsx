@@ -90,6 +90,7 @@ export function CsvEditorPage() {
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 30,
+    scrollMargin: ROW_HEIGHT, // offset for sticky header inside scroll container
   });
 
   // Focus inline input when edit mode starts from keyboard/programmatic path
@@ -351,7 +352,7 @@ export function CsvEditorPage() {
               ))}
             </div>
 
-            <div style={{ height: virtualizer.getTotalSize(), width: totalW, position: "relative" }}>
+            <div style={{ height: virtualizer.getTotalSize() - ROW_HEIGHT, width: totalW, position: "relative" }}>
               {virtualizer.getVirtualItems().map((vr) => {
                 const row = trows[vr.index];
                 const rd = row.original;
@@ -365,7 +366,7 @@ export function CsvEditorPage() {
                     key={vr.key}
                     data-index={vr.index}
                     ref={virtualizer.measureElement}
-                    style={{ position: "absolute", top: 0, transform: `translateY(${vr.start}px)`, width: totalW, height: ROW_HEIGHT }}
+                    style={{ position: "absolute", top: 0, transform: `translateY(${vr.start - virtualizer.options.scrollMargin}px)`, width: totalW, height: ROW_HEIGHT }}
                     className={cn(
                       "flex border-b",
                       isSel
