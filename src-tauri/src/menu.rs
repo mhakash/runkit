@@ -22,6 +22,17 @@ pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
         &open_pdf,
     ])?;
 
+    // ── Edit ─────────────────────────────────────────────────────────────────
+    let edit_menu = Submenu::with_items(app, "Edit", true, &[
+        &PredefinedMenuItem::undo(app, None)?,
+        &PredefinedMenuItem::redo(app, None)?,
+        &PredefinedMenuItem::separator(app)?,
+        &PredefinedMenuItem::cut(app, None)?,
+        &PredefinedMenuItem::copy(app, None)?,
+        &PredefinedMenuItem::paste(app, None)?,
+        &PredefinedMenuItem::select_all(app, None)?,
+    ])?;
+
     // ── Tools ─────────────────────────────────────────────────────────────────
     let todo_item = MenuItem::with_id(app, "open-todo", "Todo", true, None::<&str>)?;
     let pdf_item = MenuItem::with_id(app, "open-pdf-tool", "PDF Reader", true, None::<&str>)?;
@@ -42,7 +53,7 @@ pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
     let view_menu = Submenu::with_items(app, "View", true, &[&theme_submenu])?;
 
     // ── Assemble ──────────────────────────────────────────────────────────────
-    let menu = Menu::with_items(app, &[&app_menu, &file_menu, &tools_menu, &view_menu])?;
+    let menu = Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &tools_menu, &view_menu])?;
     app.set_menu(menu)?;
 
     app.on_menu_event(move |app, event| {

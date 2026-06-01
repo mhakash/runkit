@@ -24,7 +24,9 @@ export interface CsvEditorState {
   isDirty: boolean;
   loading: boolean;
   error: string | null;
-  filterText: string;
+  filterClause: string;
+  filterError: string | null;
+  activeFilterIndices: Set<number> | null;
   sortConfig: SortConfig | null;
   selectedRows: Set<number>;
 }
@@ -40,7 +42,9 @@ export interface CsvEditorActions {
   deleteColumn: (colIndex: number) => void;
   renameColumn: (colIndex: number, name: string) => void;
   setSort: (colIndex: number) => void;
-  setFilter: (text: string) => void;
+  setFilterClause: (text: string) => void;
+  applyFilter: () => Promise<void>;
+  clearFilter: () => void;
   setSelectedRows: (rows: Set<number>) => void;
   clearError: () => void;
 }
@@ -69,7 +73,9 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
   const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filterText, setFilterText] = useState("");
+  const [filterClause, setFilterClause] = useState("");
+  const [filterError, setFilterError] = useState<string | null>(null);
+  const [activeFilterIndices, setActiveFilterIndices] = useState<Set<number> | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
 
@@ -95,7 +101,9 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
       setIsDirty(false);
       setSelectedRows(new Set());
       setSortConfig(null);
-      setFilterText("");
+      setFilterClause("");
+      setFilterError(null);
+      setActiveFilterIndices(null);
       updateTabTitle(tabId, stripExtension(name));
       setCsvState(tabId, { filePath: path });
     } catch (e) {
@@ -127,6 +135,30 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
       setError(String(e));
     }
   }
+
+  const applyFilter = useCallback(async () => {
+    const clause = filterClause.trim();
+    if (!clause) {
+      setActiveFilterIndices(null);
+      setFilterError(null);
+      return;
+    }
+    try {
+      const indices = await invoke<number[]>("filter_csv", {
+        payload: { headers, rows, where_clause: clause },
+      });
+      setActiveFilterIndices(new Set(indices));
+      setFilterError(null);
+    } catch (e) {
+      setFilterError(String(e));
+    }
+  }, [filterClause, headers, rows]);
+
+  const clearFilter = useCallback(() => {
+    setFilterClause("");
+    setFilterError(null);
+    setActiveFilterIndices(null);
+  }, []);
 
   const updateCell = useCallback((rowIndex: number, colIndex: number, value: string) => {
     setRows((prev) => {
@@ -195,9 +227,8 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
   const { filteredRows, filteredToOriginal } = useMemo(() => {
     let pairs: [string[], number][] = rows.map((r, i) => [r, i]);
 
-    if (filterText.trim()) {
-      const q = filterText.toLowerCase();
-      pairs = pairs.filter(([row]) => row.some((cell) => cell.toLowerCase().includes(q)));
+    if (activeFilterIndices !== null) {
+      pairs = pairs.filter(([, i]) => activeFilterIndices.has(i));
     }
 
     if (sortConfig) {
@@ -214,7 +245,7 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
       filteredRows: pairs.map(([r]) => r),
       filteredToOriginal: pairs.map(([, i]) => i),
     };
-  }, [rows, filterText, sortConfig]);
+  }, [rows, activeFilterIndices, sortConfig]);
 
   return {
     state: {
@@ -225,7 +256,9 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
       isDirty,
       loading,
       error,
-      filterText,
+      filterClause,
+      filterError,
+      activeFilterIndices,
       sortConfig,
       selectedRows,
     },
@@ -240,7 +273,9 @@ export function useCsvEditor({ tabId }: UseCsvEditorOptions): UseCsvEditorResult
       deleteColumn,
       renameColumn,
       setSort,
-      setFilter: setFilterText,
+      setFilterClause,
+      applyFilter,
+      clearFilter,
       setSelectedRows,
       clearError: () => setError(null),
     },

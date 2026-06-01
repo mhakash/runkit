@@ -34,11 +34,11 @@ export function CsvEditorPage() {
   const { state, actions, filteredRows, filteredToOriginal } = useCsvEditor({ tabId });
   const {
     headers, fileName, filePath: loadedFilePath, isDirty, loading,
-    error, filterText, sortConfig, selectedRows, rows,
+    error, filterClause, filterError, sortConfig, selectedRows, rows,
   } = state;
   const {
     saveFile, updateCell, addRow, deleteRows, addColumn,
-    deleteColumn, renameColumn, setSort, setFilter, setSelectedRows, clearError,
+    deleteColumn, renameColumn, setSort, setFilterClause, applyFilter, clearFilter, setSelectedRows, clearError,
   } = actions;
 
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
@@ -153,13 +153,35 @@ export function CsvEditorPage() {
       return;
     }
 
+    if ((e.metaKey || e.ctrlKey) && e.key === "c" && !inInput) {
+      const { activeCell, filteredRows } = kbRef.current;
+      if (activeCell) {
+        e.preventDefault();
+        const val = filteredRows[activeCell.filteredRow]?.[activeCell.col] ?? "";
+        navigator.clipboard.writeText(val).catch(() => {});
+      }
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.key === "v" && !inInput) {
+      const { activeCell } = kbRef.current;
+      if (activeCell) {
+        e.preventDefault();
+        navigator.clipboard.readText().then((text) => {
+          setEditValue(text);
+          setIsEditing(true);
+        }).catch(() => {});
+      }
+      return;
+    }
+
     if ((e.key === "Delete" || e.key === "Backspace") && selectedRows.size > 0 && !isEditing && !inInput) {
       e.preventDefault();
       deleteRows([...selectedRows]);
       return;
     }
 
-    if (!activeCell) return;
+    if (!activeCell || inInput) return;
 
     const { filteredRow, col } = activeCell;
 
@@ -248,7 +270,8 @@ export function CsvEditorPage() {
       <CsvToolbar
         fileName={fileName}
         isDirty={isDirty}
-        filterText={filterText}
+        filterClause={filterClause}
+        filterError={filterError}
         rowCount={rows.length}
         filteredRowCount={filteredRows.length}
         colCount={headers.length}
@@ -259,7 +282,9 @@ export function CsvEditorPage() {
         onAddRow={() => addRow()}
         onAddCol={() => setAddColAfter(headers.length - 1)}
         onDeleteSelected={() => deleteRows([...selectedRows])}
-        onFilterChange={setFilter}
+        onFilterChange={setFilterClause}
+        onFilterSubmit={applyFilter}
+        onFilterClear={clearFilter}
       />
 
       {headers.length > 0 && (
