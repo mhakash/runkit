@@ -67,6 +67,12 @@ export const useTabStore = create<TabStore>((set, get) => ({
   flushSave: () => saveNow(get),
 
   addTab: () => {
+    const existing = get().tabs.find((t) => t.path === "/");
+    if (existing) {
+      set({ activeTabId: existing.id });
+      saveNow(get);
+      return;
+    }
     const tab = createTab();
     set((s) => ({ tabs: [...s.tabs, tab], tabInsertionOrder: [...s.tabInsertionOrder, tab.id], activeTabId: tab.id }));
     saveNow(get);
